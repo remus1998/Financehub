@@ -416,11 +416,11 @@
                             <h3 class="text-base font-bold text-white flex items-center">
                                 <i data-lucide="repeat" class="w-5 h-5 mr-2 text-indigo-400"></i> Fix Havi Rendszeres Tételek (Előfizetések & Fix Bevételek)
                             </h3>
-                            <p class="text-xs text-slate-400">Állíts be havonta ismétlődő tételeket, és rögzítsd őket 1 kattintással</p>
+                            <p class="text-xs text-slate-400">Állíts be havonta ismétlődő tételeket, és rögzítsd őket egyenként vagy egyszerre</p>
                         </div>
                         <div class="flex space-x-2 w-full sm:w-auto">
                             <button onclick="applyRecurringForCurrentMonth()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-3 py-1.5 rounded-lg transition-colors flex items-center justify-center">
-                                <i data-lucide="play" class="w-3.5 h-3.5 mr-1"></i> Hónapra Érvényesít
+                                <i data-lucide="play" class="w-3.5 h-3.5 mr-1"></i> Összes Érvényesítése
                             </button>
                             <button onclick="openRecurringModal()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3 py-1.5 rounded-lg transition-colors flex items-center justify-center">
                                 <i data-lucide="plus" class="w-3.5 h-3.5 mr-1"></i> Új Fix Tétel
@@ -867,7 +867,8 @@
 
     <div id="recurring-modal" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-4">
         <div class="glass-card p-6 w-full max-w-sm space-y-4">
-            <h3 class="text-base font-bold text-white">Új Fix Havi Tranzakció</h3>
+            <h3 id="recurring-modal-title" class="text-base font-bold text-white">Új Fix Havi Tranzakció</h3>
+            <input type="hidden" id="rec-edit-id">
             <div class="space-y-3">
                 <div>
                     <label class="block text-xs font-semibold text-slate-400 mb-1">Megnevezés / Szolgáltató</label>
@@ -886,7 +887,7 @@
                 </div>
                 <div>
                     <label class="block text-xs font-semibold text-slate-400 mb-1">Számla</label>
-                    <select id="rec-account" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-white"></select>
+                    <select id="rec-account" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-xs text-white"></select>
                 </div>
                 <div class="grid grid-cols-2 gap-2">
                     <div>
@@ -897,6 +898,10 @@
                         <label class="block text-xs font-semibold text-slate-400 mb-1">Pénznem</label>
                         <select id="rec-currency" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-xs text-white"></select>
                     </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">A hónap melyik napján esedékes? (1-31)</label>
+                    <input type="number" id="rec-day" min="1" max="31" value="1" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-xs text-white">
                 </div>
             </div>
             <div class="flex justify-end space-x-2 pt-2">
@@ -983,7 +988,6 @@
         let loginAttempts = 0;
         let lockoutTimer = null;
 
-        // VALÓDI, AKTUÁLIS DÁTUM
         const nowObj = new Date();
         const CURRENT_YEAR = nowObj.getFullYear();
         const CURRENT_MONTH = nowObj.getMonth() + 1;
@@ -996,7 +1000,6 @@
             return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         }
 
-        // Elindult-e már a befektetés az adott évben/hónapban?
         function invStarted(inv, year, month) {
             const cy = inv.createdYear || CURRENT_YEAR;
             const cm = inv.createdMonth || 1;
@@ -1038,7 +1041,6 @@
             }
         };
 
-        // HELPER FOR CLEANING HUNGARIAN ACCENTS IN JSPDF (ő/ű -> ö/ü)
         function sanitizePdfText(str) {
             if (!str) return '';
             return str
@@ -1046,7 +1048,6 @@
                 .replace(/ű/g, 'ü').replace(/Ű/g, 'Ü');
         }
 
-        // CENTERED TOAST NOTIFICATION SYSTEM
         function showToast(message, type = 'error') {
             const container = document.getElementById('toast-container');
             if (!container) return;
@@ -1072,7 +1073,6 @@
             }, 4000);
         }
 
-        // LIVE CLOCK FUNCTION
         function updateLiveClock() {
             const clockEl = document.getElementById('live-clock-display');
             if (!clockEl) return;
@@ -1092,7 +1092,6 @@
             if (saved) {
                 try {
                     const parsed = JSON.parse(saved);
-                    if (parsed['mprekuta@gmail.com']) delete parsed['mprekuta@gmail.com'];
                     if (!parsed['demo@financehub.hu']) {
                         parsed['demo@financehub.hu'] = defaultUsers['demo@financehub.hu'];
                     }
@@ -1104,7 +1103,6 @@
         }
 
         function saveUsersDB(db) {
-            if (db['mprekuta@gmail.com']) delete db['mprekuta@gmail.com'];
             localStorage.setItem('fh_users_db', JSON.stringify(db));
         }
 
@@ -1170,7 +1168,6 @@
                 if (selectYear) selectYear.appendChild(opt.cloneNode(true));
                 if (annualSelectYear) annualSelectYear.appendChild(opt);
             }
-            // A klónozás nem viszi át a "selected"-et, ezért value-val állítjuk be
             if (selectYear) selectYear.value = selectedYear;
             if (annualSelectYear) annualSelectYear.value = selectedYear;
             const m = document.getElementById('select-month');
@@ -1406,6 +1403,7 @@
                     budgetLimits: { 'Élelmiszer': 60000, 'Rezsi': 100000 }
                 };
                 saveUsersDB(usersDB);
+                showToast(`Sikeres regisztráció! E-mail: ${email} | Jelszó: ${password}`, "success");
                 loginUser(email);
             }
         }
@@ -1864,14 +1862,13 @@
                     const opt = document.createElement('option');
                     opt.value = acc.name;
                     if (acc.type === 'locked') {
-                        opt.disabled = true;
-                        opt.innerText = `🔒 ${acc.name} (ZÁROLT - Nem költhető)`;
+                        opt.innerText = `🔒 ${acc.name} (Zárolt)`;
                     } else if (acc.type === 'emergency') {
                         opt.innerText = `🛡️ ${acc.name} (Vészhelyzet)`;
                     } else {
                         opt.innerText = `${acc.name} (Likvid)`;
                     }
-                    if (acc.name === currentVal && !opt.disabled) opt.selected = true;
+                    if (acc.name === currentVal) opt.selected = true;
                     select.appendChild(opt);
                 });
             });
@@ -1921,7 +1918,6 @@
                 }
             });
 
-            // KAPCSOLT BEFEKTETÉSEK CSAK A KEZDŐ ÉV/HÓNAP UTÁN
             state.investments.forEach(inv => {
                 if (invStarted(inv, selectedYear, selectedMonth)) {
                     const invHuf = inv.current * (FX_RATES[inv.currency] || 1);
@@ -1966,59 +1962,129 @@
             }
 
             state.recurringItems.forEach(item => {
+                const dayStr = item.day ? `${item.day}. nap` : '1. nap';
                 const div = document.createElement('div');
                 div.className = 'p-2.5 bg-slate-900/60 rounded-lg border border-slate-800 flex justify-between items-center';
                 div.innerHTML = `
                     <div>
                         <span class="font-bold text-white block">${item.name}</span>
-                        <span class="text-[10px] text-slate-400">${item.category} • ${item.account}</span>
+                        <span class="text-[10px] text-slate-400">${item.category} • ${item.account} • ${dayStr}</span>
                     </div>
                     <div class="flex items-center space-x-2">
                         <span class="font-bold ${item.type === 'income' ? 'text-emerald-500' : 'text-rose-500'}">${item.type === 'income' ? '+' : '-'}${item.amount.toLocaleString()} ${item.currency}</span>
-                        <button onclick="deleteRecurringItem(${item.id})" class="text-slate-500 hover:text-rose-400 p-1"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                        <button onclick="applySingleRecurring(${item.id})" class="bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 hover:text-white px-2 py-1 rounded text-[10px] transition-colors" title="Érvényesítés erre a hónapra">Érvényesít</button>
+                        <button onclick="openRecurringModal(${item.id})" class="text-slate-400 hover:text-indigo-400 p-1" title="Szerkeszt"><i data-lucide="edit-2" class="w-3.5 h-3.5"></i></button>
+                        <button onclick="deleteRecurringItem(${item.id})" class="text-slate-500 hover:text-rose-400 p-1" title="Törlés"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
                     </div>
                 `;
                 container.appendChild(div);
             });
+            lucide.createIcons();
         }
 
-        function openRecurringModal() {
-            document.getElementById('recurring-modal').classList.remove('hidden');
+        function openRecurringModal(id = null) {
+            const modal = document.getElementById('recurring-modal');
+            const title = document.getElementById('recurring-modal-title');
+            updateAccountSelects();
+            updateCurrencyDropdowns();
+
+            if (id) {
+                const item = state.recurringItems.find(i => i.id === id);
+                if (item) {
+                    title.innerText = "Fix Havi Tétel Szerkesztése";
+                    document.getElementById('rec-edit-id').value = item.id;
+                    document.getElementById('rec-name').value = item.name;
+                    document.getElementById('rec-type').value = item.type;
+                    document.getElementById('rec-category').value = item.category;
+                    document.getElementById('rec-account').value = item.account;
+                    document.getElementById('rec-amount').value = item.amount;
+                    document.getElementById('rec-currency').value = item.currency;
+                    document.getElementById('rec-day').value = item.day || 1;
+                }
+            } else {
+                title.innerText = "Új Fix Havi Tranzakció";
+                document.getElementById('rec-edit-id').value = '';
+                document.getElementById('rec-name').value = '';
+                document.getElementById('rec-type').value = 'expense';
+                document.getElementById('rec-category').value = '';
+                document.getElementById('rec-amount').value = '';
+                document.getElementById('rec-day').value = '1';
+            }
+            modal.classList.remove('hidden');
         }
+
         function closeRecurringModal() {
             document.getElementById('recurring-modal').classList.add('hidden');
         }
 
         function saveRecurringItem() {
+            const editId = document.getElementById('rec-edit-id').value;
             const name = document.getElementById('rec-name').value.trim();
             const type = document.getElementById('rec-type').value;
             const category = document.getElementById('rec-category').value.trim() || 'Fix Kiadás';
             const account = document.getElementById('rec-account').value;
             const amount = parseFloat(document.getElementById('rec-amount').value);
             const currency = document.getElementById('rec-currency').value;
+            const day = parseInt(document.getElementById('rec-day').value) || 1;
 
             if (!name || isNaN(amount) || amount <= 0) {
                 showToast("Érvénytelen megnevezés vagy negatív összeg!", "error");
                 return;
             }
 
-            const targetAcc = state.accountsList.find(a => a.name === account);
-            if (targetAcc && targetAcc.type === 'locked' && type === 'expense') {
-                showToast('Zárolt számláról nem adható meg fix kiadás!', "error");
-                return;
+            if (editId) {
+                const item = state.recurringItems.find(i => i.id === parseInt(editId));
+                if (item) {
+                    item.name = name;
+                    item.type = type;
+                    item.category = category;
+                    item.account = account;
+                    item.amount = amount;
+                    item.currency = currency;
+                    item.day = day;
+                }
+            } else {
+                state.recurringItems.push({
+                    id: Date.now(), name, type, category, account, amount, currency, day
+                });
             }
-
-            state.recurringItems.push({
-                id: Date.now(), name, type, category, account, amount, currency
-            });
 
             closeRecurringModal();
             renderApp();
-            showToast("Fix tétel sikeresen rögzítve!", "success");
+            showToast("Fix tétel sikeresen mentve!", "success");
         }
 
         function deleteRecurringItem(id) {
             state.recurringItems = state.recurringItems.filter(i => i.id !== id);
+            renderApp();
+        }
+
+        function applySingleRecurring(id) {
+            const rec = state.recurringItems.find(i => i.id === id);
+            if (!rec) return;
+
+            const dayPadded = String(rec.day || 1).padStart(2, '0');
+            const monthPadded = String(selectedMonth).padStart(2, '0');
+            const txDate = `${selectedYear}-${monthPadded}-${dayPadded}`;
+
+            const exists = state.transactions.some(t => t.date === txDate && t.category === rec.category && t.amount === rec.amount && t.subtag === rec.name);
+            if (exists) {
+                showToast(`Ez a fix tétel erre a napra (${txDate}) már érvényesítve van!`, "info");
+                return;
+            }
+
+            state.transactions.unshift({
+                id: Date.now() + Math.random(),
+                date: txDate,
+                type: rec.type,
+                category: rec.category,
+                account: rec.account,
+                subtag: rec.name,
+                amount: rec.amount,
+                currency: rec.currency
+            });
+
+            showToast(`"${rec.name}" sikeresen érvényesítve (${txDate})!`, "success");
             renderApp();
         }
 
@@ -2028,11 +2094,12 @@
                 return;
             }
 
-            const monthPadded = selectedMonth.toString().padStart(2, '0');
-            const txDate = `${selectedYear}-${monthPadded}-01`;
-
+            const monthPadded = String(selectedMonth).padStart(2, '0');
             let count = 0;
+
             state.recurringItems.forEach(rec => {
+                const dayPadded = String(rec.day || 1).padStart(2, '0');
+                const txDate = `${selectedYear}-${monthPadded}-${dayPadded}`;
                 const exists = state.transactions.some(t => t.date === txDate && t.category === rec.category && t.amount === rec.amount && t.subtag === rec.name);
                 if (!exists) {
                     state.transactions.unshift({
@@ -2049,7 +2116,7 @@
                 }
             });
 
-            showToast(`${count} db fix havi tétel rögzítve!`, "success");
+            showToast(`${count} db fix havi tétel rögzítve az aktuális hónapra!`, "success");
             renderApp();
         }
 
@@ -2301,7 +2368,7 @@
         }
 
         function getFilteredTransactions() {
-            const monthPadded = selectedMonth.toString().padStart(2, '0');
+            const monthPadded = String(selectedMonth).padStart(2, '0');
             const prefix = `${selectedYear}-${monthPadded}`;
             return state.transactions.filter(t => t.date && t.date.startsWith(prefix));
         }
@@ -2350,9 +2417,9 @@
                 `;
                 tbody.appendChild(tr);
             });
+            lucide.createIcons();
         }
 
-        // PONTOS IDŐZÍTETT METRIKÁK (A KEZDŐ HÓNAP ELŐTT 0)
         function calculateMetricsAndMonthlyGoal() {
             let liquidWealthHuf = 0;
             let emergencyFundTotal = 0;
@@ -2383,7 +2450,6 @@
                 }
             });
 
-            // IDŐSZŰRT BEFEKTETÉSEK: A KEZDŐ ÉV/HÓNAP ELŐTT 0
             let independentInvestmentsHuf = 0;
             state.investments.forEach(inv => {
                 if (invStarted(inv, selectedYear, selectedMonth)) {
@@ -2443,7 +2509,7 @@
                 growthStatusEl.innerHTML = `<i data-lucide="trending-up" class="w-3.5 h-3.5 mr-1 flex-shrink-0"></i> Teljes vagyon alapú`;
             }
 
-            const monthKey = `${selectedYear}-${selectedMonth.toString().padStart(2, '0')}`;
+            const monthKey = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
             if (!state.monthlyGoals[monthKey]) state.monthlyGoals[monthKey] = 100000;
             if (state.monthlySavedData[monthKey] === undefined) state.monthlySavedData[monthKey] = 0;
 
@@ -2476,7 +2542,7 @@
             tbody.innerHTML = '';
 
             for (let m = 1; m <= 12; m++) {
-                const monthKey = `${year}-${m.toString().padStart(2, '0')}`;
+                const monthKey = `${year}-${String(m).padStart(2, '0')}`;
                 const prefix = monthKey;
                 let mInc = 0, mExp = 0;
 
@@ -2495,7 +2561,15 @@
                     if (m >= selectedMonth) runningWealth += a.initialBalance || 0;
                 });
 
-                // IDŐZÍTETT BEFEKTETÉSEK: A KEZDŐ ÉV/HÓNAP ELŐTT 0
+                state.transactions.filter(t => {
+                    const [ty, tm] = t.date.split('-').map(Number);
+                    return (ty * 12 + tm) <= (year * 12 + m);
+                }).forEach(t => {
+                    const val = t.amount * (FX_RATES[t.currency] || 1);
+                    if (t.type === 'income') runningWealth += val;
+                    else if (t.type === 'expense') runningWealth -= val;
+                });
+
                 state.investments.forEach(inv => {
                     if (invStarted(inv, year, m)) {
                         runningWealth += inv.current * (FX_RATES[inv.currency] || 1);
@@ -2584,24 +2658,59 @@
             }
         }
 
-        // VAGYONMEGOSZLÁS (ASSET ALLOCATION) CHART RENDERING
         function renderAssetAllocationChart() {
             const canvasEl = document.getElementById('assetAllocationChart');
             if (!canvasEl) return;
             const ctx = canvasEl.getContext('2d');
 
-            let liquid = 0, emergency = 0, locked = 0, investments = 0;
-
+            const accountBalances = {};
             state.accountsList.forEach(acc => {
-                const bal = acc.initialBalance || 0;
+                accountBalances[acc.name] = acc.initialBalance || 0;
+            });
+
+            state.transactions.forEach(t => {
+                const val = t.amount * (FX_RATES[t.currency] || 1);
+                const accName = t.account || state.accountsList[0].name;
+                if (accountBalances[accName] !== undefined) {
+                    if (t.type === 'income') {
+                        accountBalances[accName] += val;
+                    } else if (t.type === 'expense') {
+                        accountBalances[accName] -= val;
+                    } else if (t.type === 'transfer') {
+                        accountBalances[accName] -= val;
+                        const targetAcc = t.category;
+                        if (accountBalances[targetAcc] !== undefined) {
+                            accountBalances[targetAcc] += val;
+                        }
+                    }
+                }
+            });
+
+            state.investments.forEach(inv => {
+                if (invStarted(inv, selectedYear, selectedMonth)) {
+                    const invHufVal = inv.current * (FX_RATES[inv.currency] || 1);
+                    const linkedAcc = state.accountsList.find(a => a.name === inv.type);
+                    if (linkedAcc) {
+                        accountBalances[linkedAcc.name] = (accountBalances[linkedAcc.name] || 0) + invHufVal;
+                    }
+                }
+            });
+
+            let liquid = 0, emergency = 0, locked = 0;
+            state.accountsList.forEach(acc => {
+                const bal = accountBalances[acc.name] || 0;
                 if (acc.type === 'liquid') liquid += bal;
                 else if (acc.type === 'emergency') emergency += bal;
                 else if (acc.type === 'locked') locked += bal;
             });
 
+            let investments = 0;
             state.investments.forEach(inv => {
                 if (invStarted(inv, selectedYear, selectedMonth)) {
-                    investments += inv.current * (FX_RATES[inv.currency] || 1);
+                    const linkedAcc = state.accountsList.find(a => a.name === inv.type);
+                    if (!linkedAcc) {
+                        investments += inv.current * (FX_RATES[inv.currency] || 1);
+                    }
                 }
             });
 
@@ -2652,7 +2761,6 @@
             });
         }
 
-        // ÉVES VAGYON GRAFIKON: A KEZDŐ ÉV/HÓNAP ELŐTT 0
         function renderWealthTrendChart() {
             const canvasEl = document.getElementById('wealthTrendChart');
             if (!canvasEl) return;
@@ -2665,15 +2773,22 @@
             for (let m = 1; m <= 12; m++) {
                 let currentMonthWealth = 0;
 
+                state.accountsList.forEach(acc => {
+                    currentMonthWealth += acc.initialBalance || 0;
+                });
+
+                state.transactions.filter(t => {
+                    const [ty, tm] = t.date.split('-').map(Number);
+                    return (ty * 12 + tm) <= (year * 12 + m);
+                }).forEach(t => {
+                    const val = t.amount * (FX_RATES[t.currency] || 1);
+                    if (t.type === 'income') currentMonthWealth += val;
+                    else if (t.type === 'expense') currentMonthWealth -= val;
+                });
+
                 state.investments.forEach(inv => {
                     if (invStarted(inv, year, m)) {
                         currentMonthWealth += inv.current * (FX_RATES[inv.currency] || 1);
-                    }
-                });
-
-                state.accountsList.forEach(acc => {
-                    if (m >= selectedMonth) {
-                        currentMonthWealth += acc.initialBalance || 0;
                     }
                 });
 
@@ -2719,7 +2834,6 @@
             });
         }
 
-        // BEFEKTETÉSI GRAFIKON: A KEZDŐ ÉV/HÓNAP ELŐTT 0
         function renderInvestmentsTrendChart() {
             const canvasEl = document.getElementById('investmentsTrendChart');
             if (!canvasEl) return;
@@ -2887,7 +3001,7 @@
             const currency = document.getElementById('inv-currency').value;
 
             if (!name) {
-                showToast("Kérlek adja meg a befektetés nevét!", "error");
+                showToast("Kérlek add meg a befektetés nevét!", "error");
                 return;
             }
 
@@ -2916,7 +3030,7 @@
 
             closeInvestmentModal();
             renderApp();
-            showToast("Befektetési tételek sikeresen elmentve!", "success");
+            showToast("Befektetési tétel sikeresen elmentve!", "success");
         }
 
         function deleteInvestment(id) {
@@ -2991,7 +3105,7 @@
             const limit = parseFloat(document.getElementById('budget-limit-input').value);
 
             if (!newCat || isNaN(limit) || limit <= 0) {
-                showToast("Kérlek adja meg az érvényes kategória nevet és pozitív limitet!", "error");
+                showToast("Kérlek add meg az érvényes kategória nevet és pozitív limitet!", "error");
                 return;
             }
 
@@ -3052,7 +3166,7 @@
         function saveMonthlyBalanceDelta() {
             const delta = parseFloat(document.getElementById('modal-monthly-delta').value);
             if (!isNaN(delta)) {
-                const monthKey = `${selectedYear}-${selectedMonth.toString().padStart(2, '0')}`;
+                const monthKey = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
                 if (state.monthlySavedData[monthKey] === undefined) state.monthlySavedData[monthKey] = 0;
                 state.monthlySavedData[monthKey] += delta;
                 if (state.monthlySavedData[monthKey] < 0) state.monthlySavedData[monthKey] = 0;
@@ -3065,7 +3179,7 @@
         }
 
         function openMonthlyGoalModal() {
-            const monthKey = `${selectedYear}-${selectedMonth.toString().padStart(2, '0')}`;
+            const monthKey = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
             if (!state.monthlyGoals[monthKey]) state.monthlyGoals[monthKey] = 100000;
             document.getElementById('modal-monthly-goal-lbl').innerText = `${selectedYear}. ${monthNames[selectedMonth-1]}`;
             document.getElementById('modal-monthly-goal-input').value = state.monthlyGoals[monthKey];
@@ -3079,7 +3193,7 @@
         function saveMonthlyGoal() {
             const val = parseFloat(document.getElementById('modal-monthly-goal-input').value);
             if (!isNaN(val) && val > 0) {
-                const monthKey = `${selectedYear}-${selectedMonth.toString().padStart(2, '0')}`;
+                const monthKey = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
                 state.monthlyGoals[monthKey] = val;
                 renderApp();
                 showToast("Havi cél frissítve!", "success");
