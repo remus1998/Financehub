@@ -383,12 +383,12 @@
                             </select>
                         </div>
                         <div>
-                            <label class="block text-slate-400 mb-1">Kategória</label>
+                            <label id="tx-category-label" class="block text-slate-400 mb-1">Kategória</label>
                             <select id="tx-category" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-white"></select>
                         </div>
                         <div>
-                            <label class="block text-slate-400 mb-1">Számla</label>
-                            <select id="tx-account" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-white"></select>
+                            <label id="tx-account-label" class="block text-slate-400 mb-1">Számla</label>
+                            <select id="tx-account" onchange="updateCategoryOptions()" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-white"></select>
                         </div>
                         <div>
                             <label class="block text-slate-400 mb-1">Megjegyzés / Címke</label>
@@ -791,7 +791,11 @@
     <div id="emergency-balance-modal" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-4">
         <div class="glass-card p-6 w-full max-w-sm space-y-4">
             <h3 class="text-base font-bold text-white">Vészhelyzeti Alap Módosítása (+ / -)</h3>
-            <p class="text-xs text-slate-400">Összeg, amivel növelni/csökkenteni szeretnéd a vészhelyzeti alapot:</p>
+            <p class="text-xs text-slate-400">A módosítás áthelyezésként kerül a tranzakciók közé: pozitív összegnél a kiválasztott számláról a vészhelyzeti alapba, negatívnál vissza.</p>
+            <div>
+                <label class="block text-xs font-semibold text-slate-400 mb-1">Kapcsolódó számla</label>
+                <select id="modal-emergency-account" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-xs text-white"></select>
+            </div>
             <div>
                 <label class="block text-xs font-semibold text-slate-400 mb-1">Változás összege (Ft)</label>
                 <input type="number" id="modal-emergency-delta" placeholder="pl. 50000 vagy -20000" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-xs text-white">
@@ -876,12 +880,17 @@
                 </div>
                 <div>
                     <label class="block text-xs font-semibold text-slate-400 mb-1">Típus</label>
-                    <select id="rec-type" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-xs text-white">
+                    <select id="rec-type" onchange="toggleRecurringTransfer()" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-xs text-white">
                         <option value="expense">Fix Kiadás</option>
                         <option value="income">Fix Bevétel</option>
+                        <option value="transfer">Fix Átvezetés (pl. havi vészhelyzeti alap)</option>
                     </select>
                 </div>
-                <div>
+                <div id="rec-target-wrap" class="hidden">
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Cél számla (ide kerül az összeg)</label>
+                    <select id="rec-target" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-xs text-white"></select>
+                </div>
+                <div id="rec-category-wrap">
                     <label class="block text-xs font-semibold text-slate-400 mb-1">Kategória</label>
                     <input type="text" id="rec-category" placeholder="pl. Szórakozás, Lakhatás" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-xs text-white">
                 </div>
@@ -1004,6 +1013,124 @@
             const cy = inv.createdYear || CURRENT_YEAR;
             const cm = inv.createdMonth || 1;
             return (year * 12 + month) >= (cy * 12 + cm);
+        }
+
+
+        // ===== KÖZPONTI SZÁMOLÓ: minden oldal ugyanebből dolgozik =====
+        function txTarget(t) {
+            return t.toAccount || t.category;
+        }
+
+        // Egy átvezetés érvényes, ha van forrás és cél számla, és nem ugyanaz
+        function isValidTransfer(t) {
+            const src = t.account || (state.accountsList[0] && state.accountsList[0].name);
+            const tgt = txTarget(t);
+            return !!tgt && tgt !== src &&
+                state.accountsList.some(a => a.name === src) &&
+                state.accountsList.some(a => a.name === tgt);
+        }
+
+        // A kiválasztott hónap végén érvényes egyenlegek (tranzakciók + befektetések)
+        function computeWealthAt(year, month) {
+            const limit = year * 12 + month;
+            const balances = {};
+            state.accountsList.forEach(a => { balances[a.name] = a.initialBalance || 0; });
+
+            state.transactions.forEach(t => {
+                if (!t.date) return;
+                const [ty, tm] = t.date.split('-').map(Number);
+                if (ty * 12 + tm > limit) return;
+                const val = t.amount * (FX_RATES[t.currency] || 1);
+                const src = t.account || state.accountsList[0].name;
+                if (balances[src] === undefined) return;
+                if (t.type === 'income') balances[src] += val;
+                else if (t.type === 'expense') balances[src] -= val;
+                else if (t.type === 'transfer' && isValidTransfer(t)) {
+                    balances[src] -= val;
+                    balances[txTarget(t)] += val;
+                }
+            });
+
+            let independent = 0;
+            state.investments.forEach(inv => {
+                if (!invStarted(inv, year, month)) return;
+                const v = inv.current * (FX_RATES[inv.currency] || 1);
+                if (balances[inv.type] !== undefined) balances[inv.type] += v;
+                else independent += v;
+            });
+
+            let liquid = 0, emergency = 0, locked = 0;
+            state.accountsList.forEach(a => {
+                const b = balances[a.name] || 0;
+                if (a.type === 'emergency') emergency += b;
+                else if (a.type === 'locked') locked += b;
+                else liquid += b;
+            });
+            return { balances, liquid, emergency, locked, independent, total: liquid + emergency + locked + independent };
+        }
+
+        // Havi félretett összeg = kézi korrekció + automatikus (likvid -> vészhelyzeti/zárolt átvezetések)
+        function getMonthSaved(year, month) {
+            const key = `${year}-${String(month).padStart(2, '0')}`;
+            const manual = state.monthlySavedData[key] || 0;
+            let auto = 0;
+            state.transactions.forEach(t => {
+                if (t.type !== 'transfer' || !t.date || !t.date.startsWith(key) || !isValidTransfer(t)) return;
+                const src = state.accountsList.find(a => a.name === (t.account || state.accountsList[0].name));
+                const tgt = state.accountsList.find(a => a.name === txTarget(t));
+                const val = t.amount * (FX_RATES[t.currency] || 1);
+                const srcLiquid = src.type === 'liquid', tgtLiquid = tgt.type === 'liquid';
+                if (srcLiquid && !tgtLiquid) auto += val;
+                else if (!srcLiquid && tgtLiquid) auto -= val;
+            });
+            return { manual, auto, total: Math.max(0, manual + auto) };
+        }
+
+        // A kiválasztott időszakba eső alapértelmezett dátum
+        function periodTxDate() {
+            if (selectedYear === CURRENT_YEAR && selectedMonth === CURRENT_MONTH) return todayStr();
+            return `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`;
+        }
+
+        function jumpToDatePeriod(dateStr) {
+            const [y, m] = dateStr.split('-').map(Number);
+            if (!y || !m) return;
+            if (y !== selectedYear || m !== selectedMonth) {
+                selectedYear = y;
+                selectedMonth = m;
+                document.getElementById('select-year').value = y;
+                document.getElementById('select-month').value = m;
+            }
+        }
+
+        function getEmergencyAccount(createIfMissing) {
+            let acc = state.accountsList.find(a => a.type === 'emergency');
+            if (!acc && createIfMissing) {
+                acc = { name: 'VÉSZHELYZET', type: 'emergency', initialBalance: 0 };
+                state.accountsList.push(acc);
+            }
+            return acc;
+        }
+
+        // Importált / régi adatok kiegészítése hiányzó mezőkkel
+        function normalizeState() {
+            if (!state.monthlyGoals) state.monthlyGoals = {};
+            if (!state.monthlySavedData) state.monthlySavedData = {};
+            if (!state.annualGoals) state.annualGoals = {};
+            if (!state.emergencySettings) state.emergencySettings = { monthlyExpense: 300000, targetMonths: 6 };
+            if (!state.accountsList || !state.accountsList.length) {
+                state.accountsList = [{ name: 'REVOLUT', type: 'liquid', initialBalance: 0 }];
+            }
+            state.accountsList.forEach(acc => { if (acc.initialBalance === undefined) acc.initialBalance = 0; });
+            if (!state.recurringItems) state.recurringItems = [];
+            if (!state.transactions) state.transactions = [];
+            if (!state.investments) state.investments = [];
+            if (!state.sinkingFunds) state.sinkingFunds = [];
+            if (!state.budgetLimits) state.budgetLimits = {};
+            // régi átvezetéseknél a cél számlát külön mezőbe is eltároljuk
+            state.transactions.forEach(t => {
+                if (t.type === 'transfer' && !t.toAccount) t.toAccount = t.category;
+            });
         }
 
         const monthNames = [
@@ -1411,17 +1538,7 @@
         function loginUser(email) {
             currentUserEmail = email;
             state = usersDB[email];
-            if (!state.monthlyGoals) state.monthlyGoals = {};
-            if (!state.monthlySavedData) state.monthlySavedData = {};
-            if (!state.annualGoals) state.annualGoals = {};
-            if (!state.emergencySettings) state.emergencySettings = { monthlyExpense: 300000, targetMonths: 6 };
-            if (!state.accountsList) {
-                state.accountsList = [{ name: 'REVOLUT', type: 'liquid', initialBalance: 0 }];
-            }
-            state.accountsList.forEach(acc => { if (acc.initialBalance === undefined) acc.initialBalance = 0; });
-            if (!state.recurringItems) state.recurringItems = [];
-            if (!state.investments) state.investments = [];
-            if (!state.sinkingFunds) state.sinkingFunds = [];
+                        normalizeState();
 
             document.getElementById('auth-screen').classList.add('hidden');
             document.getElementById('app').classList.remove('hidden');
@@ -1846,6 +1963,14 @@
                 showToast('Legalább egy számlának maradnia kell!', "error");
                 return;
             }
+            const name = state.accountsList[idx].name;
+            const txCount = state.transactions.filter(t => t.account === name || (t.type === 'transfer' && txTarget(t) === name)).length;
+            const invCount = state.investments.filter(i => i.type === name).length;
+            const recCount = state.recurringItems.filter(r => r.account === name || (r.type === 'transfer' && r.category === name)).length;
+            if (txCount || invCount || recCount) {
+                showToast(`"${name}" nem törölhető: ${txCount} tranzakció, ${invCount} befektetés, ${recCount} fix tétel kapcsolódik hozzá. Előbb töröld vagy módosítsd ezeket.`, "error");
+                return;
+            }
             state.accountsList.splice(idx, 1);
             renderProfileAccountsList();
             renderApp();
@@ -1900,35 +2025,10 @@
             const container = document.getElementById('accounts-breakdown-container');
             container.innerHTML = '';
 
-            const balances = {};
-            state.accountsList.forEach(acc => balances[acc.name] = acc.initialBalance || 0);
-
-            state.transactions.forEach(t => {
-                const accObj = state.accountsList.find(a => a.name === t.account) || state.accountsList[0];
-                const acc = accObj ? accObj.name : state.accountsList[0].name;
-                const val = t.amount * (FX_RATES[t.currency] || 1);
-                if (t.type === 'income') balances[acc] = (balances[acc] || 0) + val;
-                else if (t.type === 'expense') balances[acc] = (balances[acc] || 0) - val;
-                else if (t.type === 'transfer') {
-                    balances[acc] = (balances[acc] || 0) - val;
-                    const targetAcc = t.category;
-                    if (balances[targetAcc] !== undefined) {
-                        balances[targetAcc] = (balances[targetAcc] || 0) + val;
-                    }
-                }
-            });
-
-            state.investments.forEach(inv => {
-                if (invStarted(inv, selectedYear, selectedMonth)) {
-                    const invHuf = inv.current * (FX_RATES[inv.currency] || 1);
-                    if (balances[inv.type] !== undefined) {
-                        balances[inv.type] += invHuf;
-                    }
-                }
-            });
+            const w = computeWealthAt(selectedYear, selectedMonth);
 
             state.accountsList.forEach(accObj => {
-                const bal = balances[accObj.name] || 0;
+                const bal = w.balances[accObj.name] || 0;
                 let badgeText = 'LIKVID';
                 let badgeClass = 'bg-emerald-500/20 text-emerald-300';
                 if (accObj.type === 'emergency') {
@@ -1963,15 +2063,21 @@
 
             state.recurringItems.forEach(item => {
                 const dayStr = item.day ? `${item.day}. nap` : '1. nap';
+                const isTransfer = item.type === 'transfer';
+                const subLine = isTransfer
+                    ? `${item.account} → ${item.category} • ${dayStr}`
+                    : `${item.category} • ${item.account} • ${dayStr}`;
+                const amountClass = item.type === 'income' ? 'text-emerald-500' : (isTransfer ? 'text-sky-500' : 'text-rose-500');
+                const prefix = item.type === 'income' ? '+' : (isTransfer ? '↔ ' : '-');
                 const div = document.createElement('div');
                 div.className = 'p-2.5 bg-slate-900/60 rounded-lg border border-slate-800 flex justify-between items-center';
                 div.innerHTML = `
                     <div>
                         <span class="font-bold text-white block">${item.name}</span>
-                        <span class="text-[10px] text-slate-400">${item.category} • ${item.account} • ${dayStr}</span>
+                        <span class="text-[10px] text-slate-400">${subLine}</span>
                     </div>
                     <div class="flex items-center space-x-2">
-                        <span class="font-bold ${item.type === 'income' ? 'text-emerald-500' : 'text-rose-500'}">${item.type === 'income' ? '+' : '-'}${item.amount.toLocaleString()} ${item.currency}</span>
+                        <span class="font-bold ${amountClass}">${prefix}${item.amount.toLocaleString()} ${item.currency}</span>
                         <button onclick="applySingleRecurring(${item.id})" class="bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 hover:text-white px-2 py-1 rounded text-[10px] transition-colors" title="Érvényesítés erre a hónapra">Érvényesít</button>
                         <button onclick="openRecurringModal(${item.id})" class="text-slate-400 hover:text-indigo-400 p-1" title="Szerkeszt"><i data-lucide="edit-2" class="w-3.5 h-3.5"></i></button>
                         <button onclick="deleteRecurringItem(${item.id})" class="text-slate-500 hover:text-rose-400 p-1" title="Törlés"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
@@ -1982,11 +2088,29 @@
             lucide.createIcons();
         }
 
+        function toggleRecurringTransfer() {
+            const isTransfer = document.getElementById('rec-type').value === 'transfer';
+            document.getElementById('rec-target-wrap').classList.toggle('hidden', !isTransfer);
+            document.getElementById('rec-category-wrap').classList.toggle('hidden', isTransfer);
+        }
+
+        function fillRecurringTargetOptions(selected) {
+            const sel = document.getElementById('rec-target');
+            sel.innerHTML = '';
+            state.accountsList.forEach(a => {
+                const o = document.createElement('option');
+                o.value = a.name; o.innerText = a.name;
+                sel.appendChild(o);
+            });
+            if (selected) sel.value = selected;
+        }
+
         function openRecurringModal(id = null) {
             const modal = document.getElementById('recurring-modal');
             const title = document.getElementById('recurring-modal-title');
             updateAccountSelects();
             updateCurrencyDropdowns();
+            fillRecurringTargetOptions(null);
 
             if (id) {
                 const item = state.recurringItems.find(i => i.id === id);
@@ -1995,8 +2119,9 @@
                     document.getElementById('rec-edit-id').value = item.id;
                     document.getElementById('rec-name').value = item.name;
                     document.getElementById('rec-type').value = item.type;
-                    document.getElementById('rec-category').value = item.category;
+                    document.getElementById('rec-category').value = item.type === 'transfer' ? '' : item.category;
                     document.getElementById('rec-account').value = item.account;
+                    if (item.type === 'transfer') fillRecurringTargetOptions(item.category);
                     document.getElementById('rec-amount').value = item.amount;
                     document.getElementById('rec-currency').value = item.currency;
                     document.getElementById('rec-day').value = item.day || 1;
@@ -2010,6 +2135,7 @@
                 document.getElementById('rec-amount').value = '';
                 document.getElementById('rec-day').value = '1';
             }
+            toggleRecurringTransfer();
             modal.classList.remove('hidden');
         }
 
@@ -2021,15 +2147,29 @@
             const editId = document.getElementById('rec-edit-id').value;
             const name = document.getElementById('rec-name').value.trim();
             const type = document.getElementById('rec-type').value;
-            const category = document.getElementById('rec-category').value.trim() || 'Fix Kiadás';
+            let category = document.getElementById('rec-category').value.trim() || 'Fix Kiadás';
             const account = document.getElementById('rec-account').value;
             const amount = parseFloat(document.getElementById('rec-amount').value);
             const currency = document.getElementById('rec-currency').value;
-            const day = parseInt(document.getElementById('rec-day').value) || 1;
+            const day = Math.min(31, Math.max(1, parseInt(document.getElementById('rec-day').value) || 1));
 
             if (!name || isNaN(amount) || amount <= 0) {
                 showToast("Érvénytelen megnevezés vagy negatív összeg!", "error");
                 return;
+            }
+
+            if (type === 'transfer') {
+                category = document.getElementById('rec-target').value;
+                if (!category || category === account) {
+                    showToast("Az átvezetésnél a forrás és a cél számla nem lehet ugyanaz!", "error");
+                    return;
+                }
+            } else {
+                const acc = state.accountsList.find(a => a.name === account);
+                if (acc && acc.type === 'locked' && type === 'expense') {
+                    showToast('Zárolt számláról nem adható meg fix kiadás!', "error");
+                    return;
+                }
             }
 
             if (editId) {
@@ -2059,21 +2199,15 @@
             renderApp();
         }
 
-        function applySingleRecurring(id) {
-            const rec = state.recurringItems.find(i => i.id === id);
-            if (!rec) return;
+        // Egy hónapnál rövidebb hónapokban (pl. február) a hónap utolsó napjára esik a tétel
+        function recurringDate(rec) {
+            const lastDay = new Date(selectedYear, selectedMonth, 0).getDate();
+            const day = Math.min(rec.day || 1, lastDay);
+            return `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        }
 
-            const dayPadded = String(rec.day || 1).padStart(2, '0');
-            const monthPadded = String(selectedMonth).padStart(2, '0');
-            const txDate = `${selectedYear}-${monthPadded}-${dayPadded}`;
-
-            const exists = state.transactions.some(t => t.date === txDate && t.category === rec.category && t.amount === rec.amount && t.subtag === rec.name);
-            if (exists) {
-                showToast(`Ez a fix tétel erre a napra (${txDate}) már érvényesítve van!`, "info");
-                return;
-            }
-
-            state.transactions.unshift({
+        function buildTxFromRecurring(rec, txDate) {
+            const tx = {
                 id: Date.now() + Math.random(),
                 date: txDate,
                 type: rec.type,
@@ -2082,8 +2216,23 @@
                 subtag: rec.name,
                 amount: rec.amount,
                 currency: rec.currency
-            });
+            };
+            if (rec.type === 'transfer') tx.toAccount = rec.category;
+            return tx;
+        }
 
+        function applySingleRecurring(id) {
+            const rec = state.recurringItems.find(i => i.id === id);
+            if (!rec) return;
+
+            const txDate = recurringDate(rec);
+            const exists = state.transactions.some(t => t.date === txDate && t.category === rec.category && t.amount === rec.amount && t.subtag === rec.name);
+            if (exists) {
+                showToast(`Ez a fix tétel erre a napra (${txDate}) már érvényesítve van!`, "info");
+                return;
+            }
+
+            state.transactions.unshift(buildTxFromRecurring(rec, txDate));
             showToast(`"${rec.name}" sikeresen érvényesítve (${txDate})!`, "success");
             renderApp();
         }
@@ -2094,24 +2243,12 @@
                 return;
             }
 
-            const monthPadded = String(selectedMonth).padStart(2, '0');
             let count = 0;
-
             state.recurringItems.forEach(rec => {
-                const dayPadded = String(rec.day || 1).padStart(2, '0');
-                const txDate = `${selectedYear}-${monthPadded}-${dayPadded}`;
+                const txDate = recurringDate(rec);
                 const exists = state.transactions.some(t => t.date === txDate && t.category === rec.category && t.amount === rec.amount && t.subtag === rec.name);
                 if (!exists) {
-                    state.transactions.unshift({
-                        id: Date.now() + Math.random(),
-                        date: txDate,
-                        type: rec.type,
-                        category: rec.category,
-                        account: rec.account,
-                        subtag: rec.name,
-                        amount: rec.amount,
-                        currency: rec.currency
-                    });
+                    state.transactions.unshift(buildTxFromRecurring(rec, txDate));
                     count++;
                 }
             });
@@ -2282,13 +2419,22 @@
             dlAnchorElem.click();
         }
 
+        function renderAccountsAfterImport() {
+            updateCategoryOptions();
+            updateAccountSelects();
+            renderProfileAccountsList();
+        }
+
         function importUserData(event) {
             const fileReader = new FileReader();
             fileReader.onload = function(e) {
                 try {
                     const importedState = JSON.parse(e.target.result);
                     if (importedState && importedState.transactions) {
+                        if (!importedState.password) importedState.password = state.password;
                         state = importedState;
+                        normalizeState();
+                        renderAccountsAfterImport();
                         renderApp();
                         showToast('Adatok beimportálva!', "success");
                     } else {
@@ -2305,7 +2451,13 @@
             const type = document.getElementById('tx-type').value;
             const select = document.getElementById('tx-category');
             if (!select) return;
+            const previous = select.value;
             select.innerHTML = '';
+
+            const catLabel = document.getElementById('tx-category-label');
+            const accLabel = document.getElementById('tx-account-label');
+            if (catLabel) catLabel.innerText = type === 'transfer' ? 'Cél számla (ide megy)' : 'Kategória';
+            if (accLabel) accLabel.innerText = type === 'transfer' ? 'Forrás számla (innen megy)' : 'Számla';
 
             let options = [];
             if (type === 'expense') {
@@ -2313,11 +2465,15 @@
                 if (!options.length) options = ['Élelmiszer', 'Rezsi & Számlák', 'Otthon & Fix költségek', 'Egyéb Kiadás'];
             }
             else if (type === 'income') options = ['Fizetés', 'Mellékállás', 'Befektetési Hozam', 'Egyéb Bevétel'];
-            else options = state.accountsList.map(a => a.name);
+            else {
+                const src = document.getElementById('tx-account').value;
+                options = state.accountsList.map(a => a.name).filter(n => n !== src);
+            }
 
             options.forEach(opt => {
                 const el = document.createElement('option');
                 el.value = opt; el.innerText = opt;
+                if (opt === previous) el.selected = true;
                 select.appendChild(el);
             });
         }
@@ -2342,10 +2498,21 @@
                 return;
             }
 
-            const targetAcc = state.accountsList.find(a => a.name === account);
-            if (targetAcc && targetAcc.type === 'locked' && type === 'expense') {
+            const srcAcc = state.accountsList.find(a => a.name === account);
+            if (srcAcc && srcAcc.type === 'locked' && type === 'expense') {
                 showToast('VÉSZHELYZETI VÉDELEM: Zárolt számláról nem lehet kiadást rögzíteni!', "error");
                 return;
+            }
+
+            if (type === 'transfer') {
+                if (!category || category === account) {
+                    showToast("Az áthelyezésnél a forrás és a cél számla nem lehet ugyanaz!", "error");
+                    return;
+                }
+                if (!state.accountsList.some(a => a.name === category)) {
+                    showToast("Válassz érvényes cél számlát!", "error");
+                    return;
+                }
             }
 
             const newTx = {
@@ -2353,12 +2520,18 @@
                 date: dateVal,
                 type, category, account, subtag, amount, currency
             };
+            if (type === 'transfer') newTx.toAccount = category;
 
             state.transactions.unshift(newTx);
             document.getElementById('tx-amount').value = '';
             document.getElementById('tx-subtag').value = '';
+
+            // Az új tétel hónapjára ugrunk, hogy minden oldalon rögtön látszódjon
+            jumpToDatePeriod(dateVal);
             renderApp();
-            showToast("Tranzakció sikeresen felvéve!", "success");
+            showToast(type === 'transfer'
+                ? `Áthelyezés rögzítve: ${account} → ${category}`
+                : "Tranzakció sikeresen felvéve!", "success");
         }
 
         function deleteTransaction(id) {
@@ -2378,7 +2551,7 @@
             if (!tbody) return;
             tbody.innerHTML = '';
 
-            const filtered = getFilteredTransactions();
+            const filtered = getFilteredTransactions().slice().sort((a, b) => b.date.localeCompare(a.date));
 
             if (filtered.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-500">Nincs rögzített tranzakció ebben a hónapban (${selectedYear}. ${monthNames[selectedMonth-1]}).</td></tr>`;
@@ -2390,6 +2563,8 @@
                 let badgeClass = 'bg-rose-500/10 text-rose-500 border-rose-500/20';
                 let typeText = 'KIADÁS';
                 let amountPrefix = '-';
+                const srcName = t.account || state.accountsList[0].name;
+                let categoryHtml = `${t.category} ${t.subtag ? `<span class="text-[10px] text-indigo-400 ml-1">(${t.subtag})</span>` : ''}`;
 
                 if (t.type === 'income') {
                     badgeClass = 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20';
@@ -2397,15 +2572,17 @@
                 } else if (t.type === 'transfer') {
                     badgeClass = 'bg-sky-500/10 text-sky-500 border-sky-500/20';
                     typeText = 'ÁTHELYEZÉS'; amountPrefix = '↔ ';
+                    categoryHtml = `${srcName} → ${txTarget(t)} ${t.subtag ? `<span class="text-[10px] text-indigo-400 ml-1">(${t.subtag})</span>` : ''}`;
+                    if (!isValidTransfer(t)) {
+                        categoryHtml += ` <span class="text-[10px] text-amber-400 ml-1" title="Azonos forrás és cél számla, vagy nem létező számla: az egyenlegekre nincs hatása. Töröld és rögzítsd újra.">⚠ nincs hatása</span>`;
+                    }
                 }
 
                 tr.innerHTML = `
                     <td class="p-2.5 text-slate-400 whitespace-nowrap">${t.date}</td>
                     <td class="p-2.5 whitespace-nowrap"><span class="px-2 py-0.5 rounded border text-[10px] ${badgeClass}">${typeText}</span></td>
-                    <td class="p-2.5 font-medium text-white whitespace-nowrap">
-                        ${t.category} ${t.subtag ? `<span class="text-[10px] text-indigo-400 ml-1">(${t.subtag})</span>` : ''}
-                    </td>
-                    <td class="p-2.5 text-slate-400 text-[11px] whitespace-nowrap">${t.account || state.accountsList[0].name}</td>
+                    <td class="p-2.5 font-medium text-white whitespace-nowrap">${categoryHtml}</td>
+                    <td class="p-2.5 text-slate-400 text-[11px] whitespace-nowrap">${srcName}</td>
                     <td class="p-2.5 font-bold whitespace-nowrap ${t.type === 'income' ? 'text-emerald-500' : (t.type === 'expense' ? 'text-rose-500' : 'text-sky-500')}">
                         ${amountPrefix}${t.amount.toLocaleString()} ${t.currency}
                     </td>
@@ -2421,67 +2598,11 @@
         }
 
         function calculateMetricsAndMonthlyGoal() {
-            let liquidWealthHuf = 0;
-            let emergencyFundTotal = 0;
-            let lockedWealthTotal = 0;
-            let monthlyIncome = 0;
-            let monthlyExpense = 0;
-
-            const accountBalances = {};
-            state.accountsList.forEach(acc => {
-                accountBalances[acc.name] = acc.initialBalance || 0;
-            });
-
-            state.transactions.forEach(t => {
-                const val = t.amount * (FX_RATES[t.currency] || 1);
-                const accName = t.account || state.accountsList[0].name;
-                if (accountBalances[accName] !== undefined) {
-                    if (t.type === 'income') {
-                        accountBalances[accName] += val;
-                    } else if (t.type === 'expense') {
-                        accountBalances[accName] -= val;
-                    } else if (t.type === 'transfer') {
-                        accountBalances[accName] -= val;
-                        const targetAcc = t.category;
-                        if (accountBalances[targetAcc] !== undefined) {
-                            accountBalances[targetAcc] += val;
-                        }
-                    }
-                }
-            });
-
-            let independentInvestmentsHuf = 0;
-            state.investments.forEach(inv => {
-                if (invStarted(inv, selectedYear, selectedMonth)) {
-                    const invHufVal = inv.current * (FX_RATES[inv.currency] || 1);
-                    const linkedAcc = state.accountsList.find(a => a.name === inv.type);
-                    if (linkedAcc) {
-                        accountBalances[linkedAcc.name] = (accountBalances[linkedAcc.name] || 0) + invHufVal;
-                    } else {
-                        independentInvestmentsHuf += invHufVal;
-                    }
-                }
-            });
-
-            state.accountsList.forEach(acc => {
-                const bal = accountBalances[acc.name] || 0;
-                if (acc.type === 'emergency') {
-                    emergencyFundTotal += bal;
-                } else if (acc.type === 'locked') {
-                    lockedWealthTotal += bal;
-                } else if (acc.type === 'liquid') {
-                    liquidWealthHuf += bal;
-                }
-            });
-
-            const monthFiltered = getFilteredTransactions();
-            monthFiltered.forEach(t => {
-                const hufVal = t.amount * (FX_RATES[t.currency] || 1);
-                if (t.type === 'income') monthlyIncome += hufVal;
-                else if (t.type === 'expense') monthlyExpense += hufVal;
-            });
-
-            let totalHufValue = liquidWealthHuf + emergencyFundTotal + lockedWealthTotal + independentInvestmentsHuf;
+            const w = computeWealthAt(selectedYear, selectedMonth);
+            const liquidWealthHuf = w.liquid;
+            const emergencyFundTotal = w.emergency;
+            const lockedWealthTotal = w.locked;
+            const totalHufValue = w.total;
 
             document.getElementById('total-wealth').innerText = `${Math.round(totalHufValue).toLocaleString()} Ft`;
             document.getElementById('liquid-wealth').innerText = `${Math.round(liquidWealthHuf).toLocaleString()} Ft`;
@@ -2490,19 +2611,23 @@
 
             const emSettings = state.emergencySettings || { monthlyExpense: 300000, targetMonths: 6 };
             const monthsCovered = emSettings.monthlyExpense > 0 ? (emergencyFundTotal / emSettings.monthlyExpense).toFixed(1) : 0;
-            document.getElementById('emergency-months-display').innerText = `${monthsCovered} havi megélhetés`;
+            const targetEmergency = emSettings.monthlyExpense * emSettings.targetMonths;
+            document.getElementById('emergency-months-display').innerText = `${monthsCovered} / ${emSettings.targetMonths} havi megélhetés (cél: ${Math.round(targetEmergency).toLocaleString()} Ft)`;
 
-            let currentMonthNet = monthlyIncome - monthlyExpense;
-            let prevWealthBase = totalHufValue - currentMonthNet;
+            // Növekedés az előző hónap végi vagyonhoz képest
+            const prevY = selectedMonth === 1 ? selectedYear - 1 : selectedYear;
+            const prevM = selectedMonth === 1 ? 12 : selectedMonth - 1;
+            const prevTotal = computeWealthAt(prevY, prevM).total;
+            const diff = totalHufValue - prevTotal;
 
             const growthStatusEl = document.getElementById('wealth-growth-status');
-            if (prevWealthBase > 0) {
-                const growthPct = (currentMonthNet / prevWealthBase) * 100;
-                const isPos = growthPct >= 0;
+            if (prevTotal > 0) {
+                const growthPct = (diff / prevTotal) * 100;
+                const isPos = diff >= 0;
                 growthStatusEl.className = `text-[11px] font-semibold mt-2 flex items-center ${isPos ? 'text-emerald-500' : 'text-rose-500'}`;
                 growthStatusEl.innerHTML = `
                     <i data-lucide="${isPos ? 'trending-up' : 'trending-down'}" class="w-3.5 h-3.5 mr-1 flex-shrink-0"></i>
-                    ${isPos ? '+' : ''}${growthPct.toFixed(1)}% (${isPos ? '+' : ''}${Math.round(currentMonthNet).toLocaleString()} Ft) előző hónaphoz képest
+                    ${isPos ? '+' : ''}${growthPct.toFixed(1)}% (${isPos ? '+' : ''}${Math.round(diff).toLocaleString()} Ft) előző hónaphoz képest
                 `;
             } else {
                 growthStatusEl.className = 'text-[11px] text-emerald-500 mt-2 flex items-center';
@@ -2511,10 +2636,10 @@
 
             const monthKey = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
             if (!state.monthlyGoals[monthKey]) state.monthlyGoals[monthKey] = 100000;
-            if (state.monthlySavedData[monthKey] === undefined) state.monthlySavedData[monthKey] = 0;
 
+            const saved = getMonthSaved(selectedYear, selectedMonth);
             const monthlyGoal = state.monthlyGoals[monthKey];
-            const monthlySaved = state.monthlySavedData[monthKey];
+            const monthlySaved = saved.total;
             const monthlyPct = Math.min(100, Math.max(0, (monthlySaved / monthlyGoal) * 100));
 
             document.getElementById('monthly-target-amount-display').innerText = `${monthlyGoal.toLocaleString()} Ft`;
@@ -2524,10 +2649,11 @@
             document.getElementById('monthly-goal-progress-bar').style.width = `${monthlyPct}%`;
 
             const mStatusMsg = document.getElementById('monthly-goal-status-message');
+            const breakdown = ` (áthelyezésekből: ${Math.round(saved.auto).toLocaleString()} Ft, kézi korrekció: ${Math.round(saved.manual).toLocaleString()} Ft)`;
             if (monthlySaved >= monthlyGoal) {
-                mStatusMsg.innerHTML = `<strong>Szuper!</strong> Teljesítetted a(z) ${selectedYear}. ${monthNames[selectedMonth-1]}i havi megtakarítási célt!`;
+                mStatusMsg.innerHTML = `<strong>Szuper!</strong> Teljesítetted a(z) ${selectedYear}. ${monthNames[selectedMonth-1]}i havi megtakarítási célt!${breakdown}`;
             } else {
-                mStatusMsg.innerHTML = `Még <strong>${Math.round(monthlyGoal - monthlySaved).toLocaleString()} Ft</strong> hiányzik a havi cél eléréséhez.`;
+                mStatusMsg.innerHTML = `Még <strong>${Math.round(monthlyGoal - monthlySaved).toLocaleString()} Ft</strong> hiányzik a havi cél eléréséhez.${breakdown}`;
             }
         }
 
@@ -2553,28 +2679,10 @@
                 });
                 totalInc += mInc; totalExp += mExp;
 
-                const mSaved = state.monthlySavedData[monthKey] || 0;
+                const mSaved = getMonthSaved(year, m).total;
                 totalSavedAnnual += mSaved;
 
-                let runningWealth = 0;
-                state.accountsList.forEach(a => {
-                    if (m >= selectedMonth) runningWealth += a.initialBalance || 0;
-                });
-
-                state.transactions.filter(t => {
-                    const [ty, tm] = t.date.split('-').map(Number);
-                    return (ty * 12 + tm) <= (year * 12 + m);
-                }).forEach(t => {
-                    const val = t.amount * (FX_RATES[t.currency] || 1);
-                    if (t.type === 'income') runningWealth += val;
-                    else if (t.type === 'expense') runningWealth -= val;
-                });
-
-                state.investments.forEach(inv => {
-                    if (invStarted(inv, year, m)) {
-                        runningWealth += inv.current * (FX_RATES[inv.currency] || 1);
-                    }
-                });
+                const runningWealth = computeWealthAt(year, m).total;
 
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
@@ -2663,56 +2771,8 @@
             if (!canvasEl) return;
             const ctx = canvasEl.getContext('2d');
 
-            const accountBalances = {};
-            state.accountsList.forEach(acc => {
-                accountBalances[acc.name] = acc.initialBalance || 0;
-            });
-
-            state.transactions.forEach(t => {
-                const val = t.amount * (FX_RATES[t.currency] || 1);
-                const accName = t.account || state.accountsList[0].name;
-                if (accountBalances[accName] !== undefined) {
-                    if (t.type === 'income') {
-                        accountBalances[accName] += val;
-                    } else if (t.type === 'expense') {
-                        accountBalances[accName] -= val;
-                    } else if (t.type === 'transfer') {
-                        accountBalances[accName] -= val;
-                        const targetAcc = t.category;
-                        if (accountBalances[targetAcc] !== undefined) {
-                            accountBalances[targetAcc] += val;
-                        }
-                    }
-                }
-            });
-
-            state.investments.forEach(inv => {
-                if (invStarted(inv, selectedYear, selectedMonth)) {
-                    const invHufVal = inv.current * (FX_RATES[inv.currency] || 1);
-                    const linkedAcc = state.accountsList.find(a => a.name === inv.type);
-                    if (linkedAcc) {
-                        accountBalances[linkedAcc.name] = (accountBalances[linkedAcc.name] || 0) + invHufVal;
-                    }
-                }
-            });
-
-            let liquid = 0, emergency = 0, locked = 0;
-            state.accountsList.forEach(acc => {
-                const bal = accountBalances[acc.name] || 0;
-                if (acc.type === 'liquid') liquid += bal;
-                else if (acc.type === 'emergency') emergency += bal;
-                else if (acc.type === 'locked') locked += bal;
-            });
-
-            let investments = 0;
-            state.investments.forEach(inv => {
-                if (invStarted(inv, selectedYear, selectedMonth)) {
-                    const linkedAcc = state.accountsList.find(a => a.name === inv.type);
-                    if (!linkedAcc) {
-                        investments += inv.current * (FX_RATES[inv.currency] || 1);
-                    }
-                }
-            });
+            const w = computeWealthAt(selectedYear, selectedMonth);
+            const liquid = w.liquid, emergency = w.emergency, locked = w.locked, investments = w.independent;
 
             const total = liquid + emergency + locked + investments;
             const data = [liquid, emergency, locked, investments];
@@ -2771,27 +2831,7 @@
             const monthlyWealthValues = [];
 
             for (let m = 1; m <= 12; m++) {
-                let currentMonthWealth = 0;
-
-                state.accountsList.forEach(acc => {
-                    currentMonthWealth += acc.initialBalance || 0;
-                });
-
-                state.transactions.filter(t => {
-                    const [ty, tm] = t.date.split('-').map(Number);
-                    return (ty * 12 + tm) <= (year * 12 + m);
-                }).forEach(t => {
-                    const val = t.amount * (FX_RATES[t.currency] || 1);
-                    if (t.type === 'income') currentMonthWealth += val;
-                    else if (t.type === 'expense') currentMonthWealth -= val;
-                });
-
-                state.investments.forEach(inv => {
-                    if (invStarted(inv, year, m)) {
-                        currentMonthWealth += inv.current * (FX_RATES[inv.currency] || 1);
-                    }
-                });
-
+                const currentMonthWealth = computeWealthAt(year, m).total;
                 monthlyWealthValues.push(Math.round(currentMonthWealth));
             }
 
@@ -3044,18 +3084,21 @@
             container.innerHTML = '';
 
             const categories = Object.keys(state.budgetLimits);
-            if (categories.length === 0) {
+            const monthTx = getFilteredTransactions();
+            const spentBy = {};
+            monthTx.filter(t => t.type === 'expense').forEach(t => {
+                spentBy[t.category] = (spentBy[t.category] || 0) + t.amount * (FX_RATES[t.currency] || 1);
+            });
+            const unbudgeted = Object.keys(spentBy).filter(c => !(c in state.budgetLimits));
+
+            if (categories.length === 0 && unbudgeted.length === 0) {
                 container.innerHTML = `<div class="col-span-2 text-center text-slate-500 py-6">Még nem állítottál be költségvetési keretet.</div>`;
                 return;
             }
 
-            const monthTx = getFilteredTransactions();
-
             categories.forEach(cat => {
                 const limit = state.budgetLimits[cat];
-                const spent = monthTx
-                    .filter(t => t.type === 'expense' && t.category === cat)
-                    .reduce((acc, t) => acc + (t.amount * (FX_RATES[t.currency] || 1)), 0);
+                const spent = spentBy[cat] || 0;
                 const pct = Math.min(100, (spent / limit) * 100);
 
                 const item = document.createElement('div');
@@ -3064,7 +3107,7 @@
                     <div class="flex justify-between items-center text-xs font-semibold">
                         <span class="text-white font-bold">${cat}</span>
                         <div class="flex items-center space-x-2">
-                            <span class="text-slate-400">${spent.toLocaleString()} / ${limit.toLocaleString()} Ft</span>
+                            <span class="text-slate-400">${Math.round(spent).toLocaleString()} / ${limit.toLocaleString()} Ft</span>
                             <button onclick="openBudgetModal('${cat}')" class="text-indigo-400 hover:text-indigo-300 text-[11px] ml-2">Szerkeszt</button>
                             <button onclick="deleteBudget('${cat}')" class="text-slate-500 hover:text-rose-400 text-[11px]">Törlés</button>
                         </div>
@@ -3075,6 +3118,26 @@
                 `;
                 container.appendChild(item);
             });
+
+            unbudgeted.forEach(cat => {
+                const item = document.createElement('div');
+                item.className = 'p-4 bg-amber-500/5 rounded-lg border border-amber-500/30 space-y-2';
+                item.innerHTML = `
+                    <div class="flex justify-between items-center text-xs font-semibold">
+                        <span class="text-white font-bold">${cat} <span class="text-[10px] text-amber-400 ml-1">keret nélkül</span></span>
+                        <div class="flex items-center space-x-2">
+                            <span class="text-slate-400">${Math.round(spentBy[cat]).toLocaleString()} Ft</span>
+                            <button onclick="openBudgetModalFor('${cat}')" class="text-indigo-400 hover:text-indigo-300 text-[11px] ml-2">Keret beállítása</button>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+        }
+
+        function openBudgetModalFor(cat) {
+            openBudgetModal();
+            document.getElementById('budget-cat-input').value = cat;
         }
 
         function openBudgetModal(cat = null) {
@@ -3128,6 +3191,16 @@
         }
 
         function openEmergencyBalanceModal() {
+            const sel = document.getElementById('modal-emergency-account');
+            sel.innerHTML = '';
+            state.accountsList.filter(a => a.type !== 'emergency').forEach(a => {
+                const o = document.createElement('option');
+                o.value = a.name;
+                o.innerText = `${a.name}`;
+                sel.appendChild(o);
+            });
+            const firstLiquid = state.accountsList.find(a => a.type === 'liquid');
+            if (firstLiquid) sel.value = firstLiquid.name;
             document.getElementById('modal-emergency-delta').value = '';
             document.getElementById('emergency-balance-modal').classList.remove('hidden');
         }
@@ -3138,20 +3211,45 @@
 
         function saveEmergencyBalance() {
             const delta = parseFloat(document.getElementById('modal-emergency-delta').value);
-            if (!isNaN(delta)) {
-                let emAcc = state.accountsList.find(a => a.type === 'emergency');
-                if (emAcc) {
-                    emAcc.initialBalance = (emAcc.initialBalance || 0) + delta;
-                    if (emAcc.initialBalance < 0) emAcc.initialBalance = 0;
-                } else {
-                    state.accountsList.push({ name: 'VÉSZHELYZET', type: 'emergency', initialBalance: Math.max(0, delta) });
-                }
-                renderApp();
-                showToast("Vészhelyzeti alap sikeresen módosítva!", "success");
-            } else {
+            const otherName = document.getElementById('modal-emergency-account').value;
+            if (isNaN(delta) || delta === 0) {
                 showToast("Érvénytelen összeg!", "error");
+                return;
             }
+            if (!otherName) {
+                showToast("Nincs kiválasztható számla!", "error");
+                return;
+            }
+
+            const emAcc = getEmergencyAccount(true);
+            const from = delta > 0 ? otherName : emAcc.name;
+            const to = delta > 0 ? emAcc.name : otherName;
+            const amount = Math.abs(delta);
+
+            // Fedezet ellenőrzés a kiválasztott hónap végi egyenleg alapján
+            const w = computeWealthAt(selectedYear, selectedMonth);
+            if ((w.balances[from] || 0) < amount) {
+                if (!confirm(`A(z) ${from} számla egyenlege (${Math.round(w.balances[from] || 0).toLocaleString()} Ft) kevesebb, mint ${amount.toLocaleString()} Ft. Biztosan folytatod?`)) {
+                    return;
+                }
+            }
+
+            const date = periodTxDate();
+            state.transactions.unshift({
+                id: Date.now(),
+                date,
+                type: 'transfer',
+                category: to,
+                toAccount: to,
+                account: from,
+                subtag: 'vészhelyzeti alap módosítás',
+                amount,
+                currency: 'HUF'
+            });
+
             closeEmergencyBalanceModal();
+            renderApp();
+            showToast(`Áthelyezve: ${from} → ${to} (${amount.toLocaleString()} Ft), a tranzakciók között is látszik.`, "success");
         }
 
         function openMonthlyBalanceModal() {
@@ -3167,9 +3265,7 @@
             const delta = parseFloat(document.getElementById('modal-monthly-delta').value);
             if (!isNaN(delta)) {
                 const monthKey = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
-                if (state.monthlySavedData[monthKey] === undefined) state.monthlySavedData[monthKey] = 0;
-                state.monthlySavedData[monthKey] += delta;
-                if (state.monthlySavedData[monthKey] < 0) state.monthlySavedData[monthKey] = 0;
+                state.monthlySavedData[monthKey] = (state.monthlySavedData[monthKey] || 0) + delta;
                 renderApp();
                 showToast("Havi megtakarítási egyenleg módosítva!", "success");
             } else {
