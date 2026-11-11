@@ -305,6 +305,32 @@
                     </div>
                 </div>
 
+                <!-- HAVI ÖSSZEHASONLÍTÁS -->
+                <div class="glass-card p-4 sm:p-5 space-y-4">
+                    <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-1">
+                        <h3 class="text-sm font-bold text-white flex items-center">
+                            <i data-lucide="git-compare" class="w-5 h-5 mr-2 text-sky-400"></i> Havi összehasonlítás
+                        </h3>
+                        <span id="mom-title" class="text-[11px] text-slate-400"></span>
+                    </div>
+                    <div id="mom-summary" class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs"></div>
+                    <div class="overflow-x-auto custom-scrollbar">
+                        <table class="w-full text-left text-xs min-w-[520px]">
+                            <thead class="text-slate-400 border-b border-slate-800">
+                                <tr>
+                                    <th class="p-2">Kiadási kategória</th>
+                                    <th class="p-2">Előző hónap</th>
+                                    <th class="p-2">Ez a hónap</th>
+                                    <th class="p-2">Változás</th>
+                                    <th class="p-2 w-32"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="mom-table-body" class="divide-y divide-slate-800 text-slate-300"></tbody>
+                        </table>
+                    </div>
+                    <p id="mom-note" class="text-[10px] text-slate-500"></p>
+                </div>
+
                 <!-- MONTHLY SAVINGS GOAL & CASHFLOW FORECAST -->
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div class="glass-card p-4 sm:p-5 space-y-4">
@@ -436,6 +462,23 @@
                             <i data-lucide="list" class="w-5 h-5 mr-2 text-indigo-500 flex-shrink-0"></i> Tranzakciók (<span id="tx-table-period-title">2026. November</span>)
                         </h3>
                         <span class="text-[10px] sm:text-xs text-slate-400">Szinkronizálva</span>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs">
+                        <input type="text" id="txf-search" oninput="renderTransactions()" placeholder="Keresés: kategória, címke, számla, összeg…" class="sm:col-span-2 w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-white">
+                        <select id="txf-type" onchange="renderTransactions()" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-white">
+                            <option value="">Minden típus</option>
+                            <option value="expense">Kiadás</option>
+                            <option value="income">Bevétel</option>
+                            <option value="transfer">Áthelyezés</option>
+                        </select>
+                        <select id="txf-account" onchange="renderTransactions()" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-white"><option value="">Minden számla</option></select>
+                    </div>
+                    <div class="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
+                        <div class="flex items-center space-x-3">
+                            <label class="flex items-center space-x-1 cursor-pointer"><input type="checkbox" id="txf-all" onchange="renderTransactions()" class="accent-indigo-500"><span>Keresés az összes hónapban</span></label>
+                            <span id="txf-summary"></span>
+                        </div>
+                        <button onclick="clearTxFilters()" class="text-indigo-400 hover:text-indigo-300">Szűrők törlése</button>
                     </div>
                     <div class="overflow-x-auto custom-scrollbar">
                         <table class="w-full text-left text-xs min-w-[550px]">
@@ -745,6 +788,11 @@
                 <label class="block text-xs font-semibold text-slate-400 mb-1">Jelenlegi Egyenleg (Ft)</label>
                 <input type="number" id="sinking-current" placeholder="0" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-xs text-white">
             </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-400 mb-1">Kapcsolt számla (opcionális)</label>
+                <select id="sinking-account" onchange="toggleSinkingCurrent()" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-xs text-white"></select>
+                <p class="text-[10px] text-slate-500 mt-1">Ha számlához kötöd, a cél egyenlege automatikusan a számla egyenlege lesz (tranzakciókkal és átvezetésekkel együtt mozog).</p>
+            </div>
             <div class="flex justify-end space-x-2 pt-2">
                 <button onclick="closeSinkingFundModal()" class="px-3 py-1.5 text-xs text-slate-400 hover:text-teal-400">Mégse</button>
                 <button onclick="saveSinkingFund()" class="px-3 py-1.5 text-xs bg-teal-600 hover:bg-teal-500 text-white rounded-lg">Mentés</button>
@@ -912,6 +960,11 @@
                     <label class="block text-xs font-semibold text-slate-400 mb-1">A hónap melyik napján esedékes? (1-31)</label>
                     <input type="number" id="rec-day" min="1" max="31" value="1" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-xs text-white">
                 </div>
+                <label class="flex items-start space-x-2 cursor-pointer p-2 bg-slate-900/60 rounded-lg border border-slate-800">
+                    <input type="checkbox" id="rec-auto" class="accent-emerald-500 mt-0.5">
+                    <span class="text-xs text-slate-300"><strong class="text-emerald-400">Automatikus rögzítés</strong><br>
+                    <span class="text-slate-400">Amikor az esedékes nap elérkezik, az alkalmazás megnyitáskor magától rögzíti a tételt (havonta egyszer). Változó összegű tételnél hagyd kikapcsolva.</span></span>
+                </label>
             </div>
             <div class="flex justify-end space-x-2 pt-2">
                 <button onclick="closeRecurringModal()" class="px-3 py-1.5 text-xs text-slate-400 hover:text-indigo-400">Mégse</button>
@@ -933,6 +986,13 @@
                 <div>
                     <label class="block text-xs font-semibold text-slate-400 mb-1">Típus / Számla (Hova kötődik?)</label>
                     <select id="inv-type" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-xs text-white"></select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Jelleg (a vagyonmegoszlásban hova számítson?)</label>
+                    <select id="inv-kind" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-xs text-white">
+                        <option value="portfolio">Befektetési portfólió (ETF, alap, részvény…)</option>
+                        <option value="savings">Megtakarítás (készpénz, betét, tartalék)</option>
+                    </select>
                 </div>
                 <div class="grid grid-cols-2 gap-2">
                     <div>
@@ -972,6 +1032,50 @@
         </div>
     </div>
 
+    <!-- TRANZAKCIÓ SZERKESZTÉS -->
+    <div id="edit-tx-modal" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-4">
+        <div class="glass-card p-6 w-full max-w-md space-y-3 text-xs">
+            <h3 class="text-base font-bold text-white">Tranzakció szerkesztése</h3>
+            <input type="hidden" id="etx-id">
+            <div class="grid grid-cols-2 gap-2">
+                <div><label class="block text-slate-400 mb-1">Dátum</label><input type="date" id="etx-date" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-white"></div>
+                <div><label class="block text-slate-400 mb-1">Típus</label>
+                    <select id="etx-type" onchange="onEditTxTypeChange()" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-white">
+                        <option value="expense">Kiadás</option><option value="income">Bevétel</option><option value="transfer">Áthelyezés</option>
+                    </select></div>
+                <div><label id="etx-account-label" class="block text-slate-400 mb-1">Számla</label><select id="etx-account" onchange="onEditTxTypeChange()" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-white"></select></div>
+                <div><label id="etx-category-label" class="block text-slate-400 mb-1">Kategória</label><select id="etx-category" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-white"></select></div>
+                <div class="col-span-2"><label class="block text-slate-400 mb-1">Megjegyzés / Címke</label><input type="text" id="etx-subtag" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-white"></div>
+                <div><label class="block text-slate-400 mb-1">Összeg</label><input type="number" id="etx-amount" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-white"></div>
+                <div><label class="block text-slate-400 mb-1">Pénznem</label><select id="etx-currency" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-white"></select></div>
+            </div>
+            <div class="flex justify-end space-x-2 pt-2">
+                <button onclick="closeEditTxModal()" class="px-3 py-1.5 text-slate-400 hover:text-indigo-400">Mégse</button>
+                <button onclick="saveEditTx()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg">Mentés</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- BEFEKTETÉS ÉRTÉK-ELŐZMÉNYEK -->
+    <div id="inv-value-modal" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-4">
+        <div class="glass-card p-6 w-full max-w-md space-y-3 text-xs">
+            <h3 class="text-base font-bold text-white">Értékfrissítés: <span id="ivm-name" class="text-indigo-400"></span></h3>
+            <input type="hidden" id="ivm-id">
+            <p class="text-slate-400">Add meg, mennyit ért a befektetés egy adott hónap végén. A grafikon és a vagyon ezekből a havi értékekből számol; két rögzített hónap között az utolsó ismert érték marad érvényben.</p>
+            <div class="grid grid-cols-3 gap-2 items-end">
+                <div><label class="block text-slate-400 mb-1">Év</label><select id="ivm-year" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-white"></select></div>
+                <div><label class="block text-slate-400 mb-1">Hónap</label><select id="ivm-month" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-white"></select></div>
+                <div><label class="block text-slate-400 mb-1">Érték (<span id="ivm-cur">HUF</span>)</label><input type="number" id="ivm-amount" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-white"></div>
+            </div>
+            <div class="flex justify-end"><button onclick="saveInvValue()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg">Érték rögzítése</button></div>
+            <div>
+                <div class="text-slate-400 font-semibold mb-1">Eddigi értékfrissítések</div>
+                <div id="ivm-history" class="space-y-1 max-h-48 overflow-y-auto custom-scrollbar"></div>
+            </div>
+            <div class="flex justify-end pt-1"><button onclick="closeInvValueModal()" class="px-3 py-1.5 text-slate-400 hover:text-indigo-400">Bezárás</button></div>
+        </div>
+    </div>
+
     <div id="budget-modal" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-4">
         <div class="glass-card p-6 w-full max-w-sm space-y-4">
             <h3 id="budget-modal-title" class="text-base font-bold text-white">Költségvetési Keret Módosítása</h3>
@@ -993,6 +1097,16 @@
 
     <script>
         let FX_RATES = { HUF: 1, EUR: 363, USD: 326, GBP: 436 };
+        try {
+            const savedFx = JSON.parse(localStorage.getItem('fh_custom_fx') || '{}');
+            Object.keys(savedFx).forEach(c => { if (/^[A-Z]{3}$/.test(c) && savedFx[c] > 0 && !(c in FX_RATES)) FX_RATES[c] = savedFx[c]; });
+        } catch (e) { /* sérült adat: alapértelmezett árfolyamok */ }
+        function persistCustomFx() {
+            const base = ['HUF', 'EUR', 'USD', 'GBP'];
+            const out = {};
+            Object.keys(FX_RATES).forEach(c => { if (!base.includes(c)) out[c] = FX_RATES[c]; });
+            try { localStorage.setItem('fh_custom_fx', JSON.stringify(out)); } catch (e) { /* tároló nem elérhető */ }
+        }
         let authMode = 'login';
         let loginAttempts = 0;
         let lockoutTimer = null;
@@ -1007,6 +1121,35 @@
         function todayStr() {
             const d = new Date();
             return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+
+        function esc(v) {
+            return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        // Egy befektetés értéke (a befektetés pénznemében) a megadott hónap végén.
+        // Nincs előzmény: a jelenlegi érték minden hónapra. Van előzmény: az utolsó ismert érték; az első rögzítés előtt a befektetett összeg.
+        function invValueAt(inv, year, month) {
+            const h = inv.history || [];
+            if (!h.length) return inv.current;
+            const lim = year * 12 + month;
+            let best = null;
+            h.forEach(e => {
+                const k = e.year * 12 + e.month;
+                if (k <= lim && (!best || k > best.k)) best = { k, value: e.value };
+            });
+            return best ? best.value : inv.invested;
+        }
+
+        function upsertInvHistory(inv, year, month, value) {
+            if (!inv.history) inv.history = [];
+            const ex = inv.history.find(e => e.year === year && e.month === month);
+            if (ex) ex.value = value; else inv.history.push({ year, month, value });
+            inv.history.sort((a, b) => (a.year * 12 + a.month) - (b.year * 12 + b.month));
+        }
+
+        function syncInvCurrent(inv) {
+            if (inv.history && inv.history.length) inv.current = inv.history[inv.history.length - 1].value;
         }
 
         function invStarted(inv, year, month) {
@@ -1051,22 +1194,49 @@
                 }
             });
 
-            let independent = 0;
+            // Kizárólag a tranzakciókból (átvezetés, bevétel, kiadás) származó változás számlánként
+            const txNet = {};
+            state.accountsList.forEach(a => { txNet[a.name] = balances[a.name] - (a.initialBalance || 0); });
+
+            let independent = 0, portfolio = 0, invTracked = 0;
+            const portfolioByAcc = {};
             state.investments.forEach(inv => {
                 if (!invStarted(inv, year, month)) return;
-                const v = inv.current * (FX_RATES[inv.currency] || 1);
-                if (balances[inv.type] !== undefined) balances[inv.type] += v;
-                else independent += v;
+                const v = invValueAt(inv, year, month) * (FX_RATES[inv.currency] || 1);
+                invTracked += v;
+                const linked = balances[inv.type] !== undefined;
+                if (linked) balances[inv.type] += v; else independent += v;
+                if (!linked || inv.kind === 'portfolio') {
+                    portfolio += v;
+                    if (linked) portfolioByAcc[inv.type] = (portfolioByAcc[inv.type] || 0) + v;
+                }
+            });
+
+            // A zárolt / vészhelyzeti számlára érkező átvezetések a számla befektetéséhez tartoznak
+            state.accountsList.forEach(a => {
+                if (a.type === 'liquid') return;
+                const net = txNet[a.name] || 0;
+                invTracked += net;
+                const primary = state.investments.find(i => i.type === a.name && invStarted(i, year, month));
+                if (primary && primary.kind === 'portfolio') {
+                    portfolio += net;
+                    portfolioByAcc[a.name] = (portfolioByAcc[a.name] || 0) + net;
+                }
             });
 
             let liquid = 0, emergency = 0, locked = 0;
+            const buckets = { liquid: 0, emergency: 0, locked: 0, portfolio: portfolio };
             state.accountsList.forEach(a => {
                 const b = balances[a.name] || 0;
-                if (a.type === 'emergency') emergency += b;
-                else if (a.type === 'locked') locked += b;
-                else liquid += b;
+                const rest = b - (portfolioByAcc[a.name] || 0);
+                if (a.type === 'emergency') { emergency += b; buckets.emergency += rest; }
+                else if (a.type === 'locked') { locked += b; buckets.locked += rest; }
+                else { liquid += b; buckets.liquid += rest; }
             });
-            return { balances, liquid, emergency, locked, independent, total: liquid + emergency + locked + independent };
+            return {
+                balances, txNet, liquid, emergency, locked, independent, portfolio, invTracked, buckets,
+                total: liquid + emergency + locked + independent
+            };
         }
 
         // Havi félretett összeg = kézi korrekció + automatikus (likvid -> vészhelyzeti/zárolt átvezetések)
@@ -1127,6 +1297,20 @@
             if (!state.investments) state.investments = [];
             if (!state.sinkingFunds) state.sinkingFunds = [];
             if (!state.budgetLimits) state.budgetLimits = {};
+            state.investments.forEach(inv => {
+                inv.history = Array.isArray(inv.history)
+                    ? inv.history.filter(e => e && e.year > 0 && e.month >= 1 && e.month <= 12 && isFinite(e.value))
+                    : [];
+            });
+            state.sinkingFunds.forEach(f => { if (f.account === undefined) f.account = ''; });
+            // Befektetés jellege: 'portfolio' (értéke változik: ETF, alap) vagy 'savings' (készpénz, vészhelyzeti tartalék)
+            state.investments.forEach(inv => {
+                if (inv.kind !== 'portfolio' && inv.kind !== 'savings') {
+                    const acc = state.accountsList.find(a => a.name === inv.type);
+                    const isEmergency = acc && acc.type === 'emergency';
+                    inv.kind = (isEmergency || inv.invested === inv.current) ? 'savings' : 'portfolio';
+                }
+            });
             // régi átvezetéseknél a cél számlát külön mezőbe is eltároljuk
             state.transactions.forEach(t => {
                 if (t.type === 'transfer' && !t.toAccount) t.toAccount = t.category;
@@ -1405,6 +1589,7 @@
             }
 
             FX_RATES[code] = rate;
+            persistCustomFx();
             closeAddCurrencyModal();
             renderFxRatesUI();
             if (state) renderApp();
@@ -1412,8 +1597,16 @@
         }
 
         function deleteCustomCurrency(code) {
+            const inUse = state && (state.transactions.some(t => t.currency === code) ||
+                state.investments.some(i => i.currency === code) ||
+                state.recurringItems.some(r => r.currency === code));
+            if (inUse) {
+                showToast(`A(z) ${code} nem törölhető, mert tranzakció, befektetés vagy fix tétel használja.`, "error");
+                return;
+            }
             if (confirm(`Biztosan törlöd a(z) ${code} devizapárt?`)) {
                 delete FX_RATES[code];
+                persistCustomFx();
                 renderFxRatesUI();
                 if (state) renderApp();
                 showToast(`${code} törölve.`, "info");
@@ -1530,7 +1723,7 @@
                     budgetLimits: { 'Élelmiszer': 60000, 'Rezsi': 100000 }
                 };
                 saveUsersDB(usersDB);
-                showToast(`Sikeres regisztráció! E-mail: ${email} | Jelszó: ${password}`, "success");
+                showToast(`Sikeres regisztráció! E-mail: ${email}`, "success");
                 loginUser(email);
             }
         }
@@ -1555,8 +1748,10 @@
             renderFxRatesUI();
             updateCategoryOptions();
             updateAccountSelects();
+            const autoCount = autoApplyRecurring();
             renderApp();
             showToast(`Üdvözöljük újra, ${email}!`, "success");
+            if (autoCount > 0) showToast(`${autoCount} fix tétel automatikusan rögzítve erre a hónapra.`, "info");
         }
 
         function handleLogout() {
@@ -1617,6 +1812,7 @@
             renderCashflowForecast();
             renderSmartInsights();
             renderChart();
+            renderMonthComparison();
             renderAssetAllocationChart();
             renderWealthTrendChart();
             renderInvestmentsTrendChart();
@@ -1628,10 +1824,8 @@
             const file = event.target.files[0];
             if (!file) return;
 
-            showToast(`"${file.name}" beolvasása folyamatban... (OTP / Banki Parser)`, "info");
-            setTimeout(() => {
-                showToast("Sikeres banki import! Tranzakciók rögzítve.", "success");
-            }, 1200);
+            event.target.value = '';
+            showToast(`A banki fájl importálása még nincs kész, ezért a(z) "${esc(file.name)}" fájlból nem került rögzítésre tranzakció.`, "info");
         }
 
         function renderSinkingFunds() {
@@ -1644,17 +1838,22 @@
                 return;
             }
 
+            const wealth = computeWealthAt(selectedYear, selectedMonth);
             state.sinkingFunds.forEach(fund => {
-                const pct = Math.min(100, Math.max(0, (fund.current / fund.target) * 100));
-                const isComplete = fund.current >= fund.target;
+                const isLinked = !!fund.account && wealth.balances[fund.account] !== undefined;
+                const fundCurrent = isLinked ? Math.max(0, wealth.balances[fund.account]) : fund.current;
+                const shared = isLinked && state.sinkingFunds.filter(f => f.account === fund.account).length > 1;
+                const pct = Math.min(100, Math.max(0, (fundCurrent / fund.target) * 100));
+                const isComplete = fundCurrent >= fund.target;
 
                 const card = document.createElement('div');
                 card.className = "p-3.5 bg-slate-900/60 rounded-lg border border-slate-800 space-y-2 relative group";
                 card.innerHTML = `
                     <div class="flex justify-between items-start">
                         <div>
-                            <h4 class="font-bold text-xs text-white">${fund.name}</h4>
-                            <span class="text-[11px] text-slate-400">${fund.current.toLocaleString()} / ${fund.target.toLocaleString()} Ft</span>
+                            <h4 class="font-bold text-xs text-white">${esc(fund.name)}</h4>
+                            <span class="text-[11px] text-slate-400">${Math.round(fundCurrent).toLocaleString()} / ${fund.target.toLocaleString()} Ft</span>
+                            ${isLinked ? `<span class="block text-[10px] text-sky-400">🔗 ${esc(fund.account)}${shared ? ' <span class="text-amber-400">(több cél is ezt a számlát használja)</span>' : ''}</span>` : ''}
                         </div>
                         <div class="flex space-x-1">
                             <button onclick="openSinkingFundModal(${fund.id})" class="text-slate-400 hover:text-teal-400 p-1" title="Szerkeszt"><i data-lucide="edit-2" class="w-3.5 h-3.5"></i></button>
@@ -1666,7 +1865,9 @@
                     </div>
                     <div class="flex justify-between items-center pt-1 text-[10px]">
                         <span class="${isComplete ? 'text-emerald-500 font-bold' : 'text-slate-400'}">${isComplete ? '🎯 Cél teljesítve!' : `${pct.toFixed(0)}% kész`}</span>
-                        <button onclick="updateSinkingFundBalance(${fund.id})" class="text-teal-400 hover:underline font-semibold">+ Egyenleg Módosítása</button>
+                        ${isLinked
+                            ? '<span class="text-slate-500">átvezetéssel módosul</span>'
+                            : `<button onclick="updateSinkingFundBalance(${fund.id})" class="text-teal-400 hover:underline font-semibold">+ Egyenleg Módosítása</button>`}
                     </div>
                 `;
                 container.appendChild(card);
@@ -1685,14 +1886,32 @@
                 document.getElementById('sinking-name').value = fund.name;
                 document.getElementById('sinking-target').value = fund.target;
                 document.getElementById('sinking-current').value = fund.current;
+                fillSinkingAccountSelect(fund.account || '');
             } else {
                 title.innerText = "Új Megtakarítási Cél";
                 document.getElementById('sinking-edit-id').value = '';
                 document.getElementById('sinking-name').value = '';
                 document.getElementById('sinking-target').value = '';
                 document.getElementById('sinking-current').value = '0';
+                fillSinkingAccountSelect('');
             }
+            toggleSinkingCurrent();
             modal.classList.remove('hidden');
+        }
+
+        function fillSinkingAccountSelect(selected) {
+            const sel = document.getElementById('sinking-account');
+            sel.innerHTML = '';
+            sel.appendChild(new Option('— Kézi egyenleg (nincs kapcsolat) —', ''));
+            state.accountsList.forEach(a => sel.appendChild(new Option(a.name, a.name)));
+            sel.value = state.accountsList.some(a => a.name === selected) ? selected : '';
+        }
+
+        function toggleSinkingCurrent() {
+            const linked = !!document.getElementById('sinking-account').value;
+            const cur = document.getElementById('sinking-current');
+            cur.disabled = linked;
+            cur.classList.toggle('opacity-40', linked);
         }
 
         function closeSinkingFundModal() {
@@ -1704,6 +1923,7 @@
             const name = document.getElementById('sinking-name').value.trim();
             const target = parseFloat(document.getElementById('sinking-target').value);
             const current = parseFloat(document.getElementById('sinking-current').value) || 0;
+            const account = document.getElementById('sinking-account').value;
 
             if (!name || isNaN(target) || target <= 0) {
                 showToast("Kérlek adj meg érvényes nevet és pozitív célösszeget!", "error");
@@ -1716,9 +1936,10 @@
                     fund.name = name;
                     fund.target = target;
                     fund.current = current;
+                    fund.account = account;
                 }
             } else {
-                state.sinkingFunds.push({ id: Date.now(), name, target, current });
+                state.sinkingFunds.push({ id: Date.now(), name, target, current, account });
             }
 
             closeSinkingFundModal();
@@ -1765,7 +1986,15 @@
                 else if (t.type === 'income') totalIncome += val;
             });
 
-            const dailyAverageExpense = currentDay > 0 ? (totalSpent / currentDay) : 0;
+            // A már érvényesített fix tételeket nem vetítjük ki napi átlagként (különben duplán számolódnának)
+            let appliedRecurring = 0;
+            monthTx.forEach(t => {
+                if (t.type === 'expense' && state.recurringItems.some(r => r.type === 'expense' && r.category === t.category && r.name === t.subtag)) {
+                    appliedRecurring += t.amount * (FX_RATES[t.currency] || 1);
+                }
+            });
+            const variableSpent = Math.max(0, totalSpent - appliedRecurring);
+            const dailyAverageExpense = currentDay > 0 ? (variableSpent / currentDay) : 0;
             const projectedFutureExpenses = dailyAverageExpense * remainingDays;
 
             let unappliedRecurringExpenses = 0;
@@ -1790,7 +2019,7 @@
             }
 
             if (detailsEl) {
-                detailsEl.innerText = `Napi átlagos kiadás: ${Math.round(dailyAverageExpense).toLocaleString()} Ft/nap | Hátralévő napok: ${remainingDays} nap | Várható havi kiadás: ${Math.round(projectedTotalExpense).toLocaleString()} Ft`;
+                detailsEl.innerText = `Napi átlagos kiadás (fix tételek nélkül): ${Math.round(dailyAverageExpense).toLocaleString()} Ft/nap | Hátralévő napok: ${remainingDays} nap | Várható havi kiadás: ${Math.round(projectedTotalExpense).toLocaleString()} Ft`;
             }
         }
 
@@ -1811,6 +2040,7 @@
             });
 
             Object.keys(state.budgetLimits).forEach(cat => {
+                if (cat === 'Megtakarítás') return; // megtakarításnál a keret túllépése nem probléma
                 const limit = state.budgetLimits[cat];
                 const spent = monthTx
                     .filter(t => t.type === 'expense' && t.category === cat)
@@ -1820,13 +2050,19 @@
                     insights.push({
                         type: 'danger',
                         icon: 'alert-triangle',
-                        text: `Túllépted a <strong>${cat}</strong> keretét ${Math.round(spent - limit).toLocaleString()} Ft-tal!`
+                        text: `Túllépted a <strong>${esc(cat)}</strong> keretét ${Math.round(spent - limit).toLocaleString()} Ft-tal!`
+                    });
+                } else if (spent >= limit) {
+                    insights.push({
+                        type: 'warning',
+                        icon: 'alert-circle',
+                        text: `A(z) <strong>${esc(cat)}</strong> keret teljesen elfogyott (${Math.round(spent).toLocaleString()} / ${limit.toLocaleString()} Ft).`
                     });
                 } else if (spent >= limit * 0.85) {
                     insights.push({
                         type: 'warning',
                         icon: 'alert-circle',
-                        text: `A(z) <strong>${cat}</strong> kereted 85%-át felhasználtad (${Math.round(spent).toLocaleString()} / ${limit.toLocaleString()} Ft).`
+                        text: `A(z) <strong>${esc(cat)}</strong> kereted ${Math.round((spent / limit) * 100)}%-át felhasználtad (${Math.round(spent).toLocaleString()} / ${limit.toLocaleString()} Ft).`
                     });
                 }
             });
@@ -1921,7 +2157,7 @@
                 div.className = 'flex justify-between items-center p-2 bg-slate-900/60 rounded-lg border border-slate-800 text-xs text-white';
                 div.innerHTML = `
                     <div class="flex items-center space-x-2 truncate">
-                        <span class="font-bold truncate">${acc.name}</span>
+                        <span class="font-bold truncate">${esc(acc.name)}</span>
                         <span class="text-[10px] px-1.5 py-0.5 rounded ${badgeClass}">${badge}</span>
                         <span class="text-slate-400 text-[11px]">(${acc.initialBalance.toLocaleString()} Ft)</span>
                     </div>
@@ -1967,8 +2203,9 @@
             const txCount = state.transactions.filter(t => t.account === name || (t.type === 'transfer' && txTarget(t) === name)).length;
             const invCount = state.investments.filter(i => i.type === name).length;
             const recCount = state.recurringItems.filter(r => r.account === name || (r.type === 'transfer' && r.category === name)).length;
-            if (txCount || invCount || recCount) {
-                showToast(`"${name}" nem törölhető: ${txCount} tranzakció, ${invCount} befektetés, ${recCount} fix tétel kapcsolódik hozzá. Előbb töröld vagy módosítsd ezeket.`, "error");
+            const fundCount = state.sinkingFunds.filter(f => f.account === name).length;
+            if (txCount || invCount || recCount || fundCount) {
+                showToast(`"${name}" nem törölhető: ${txCount} tranzakció, ${invCount} befektetés, ${recCount} fix tétel, ${fundCount} megtakarítási cél kapcsolódik hozzá. Előbb töröld vagy módosítsd ezeket.`, "error");
                 return;
             }
             state.accountsList.splice(idx, 1);
@@ -2043,7 +2280,7 @@
                 card.className = "p-2.5 bg-slate-900/80 rounded-lg border border-slate-800 text-center relative overflow-hidden";
                 card.innerHTML = `
                     <div class="flex items-center justify-center space-x-1">
-                        <span class="text-[10px] text-slate-400 uppercase font-semibold truncate">${accObj.name}</span>
+                        <span class="text-[10px] text-slate-400 uppercase font-semibold truncate">${esc(accObj.name)}</span>
                         <span class="text-[9px] px-1 rounded ${badgeClass}">${badgeText}</span>
                     </div>
                     <span class="text-xs sm:text-sm font-bold ${bal >= 0 ? 'text-white' : 'text-rose-500'} mt-0.5 block">${Math.round(bal).toLocaleString()} Ft</span>
@@ -2065,15 +2302,15 @@
                 const dayStr = item.day ? `${item.day}. nap` : '1. nap';
                 const isTransfer = item.type === 'transfer';
                 const subLine = isTransfer
-                    ? `${item.account} → ${item.category} • ${dayStr}`
-                    : `${item.category} • ${item.account} • ${dayStr}`;
+                    ? `${esc(item.account)} → ${esc(item.category)} • ${dayStr}`
+                    : `${esc(item.category)} • ${esc(item.account)} • ${dayStr}`;
                 const amountClass = item.type === 'income' ? 'text-emerald-500' : (isTransfer ? 'text-sky-500' : 'text-rose-500');
                 const prefix = item.type === 'income' ? '+' : (isTransfer ? '↔ ' : '-');
                 const div = document.createElement('div');
                 div.className = 'p-2.5 bg-slate-900/60 rounded-lg border border-slate-800 flex justify-between items-center';
                 div.innerHTML = `
                     <div>
-                        <span class="font-bold text-white block">${item.name}</span>
+                        <span class="font-bold text-white block">${esc(item.name)}${item.auto ? ' <span class="text-[9px] px-1 rounded bg-emerald-500/20 text-emerald-300 align-middle" title="Az esedékes napon magától rögzül">AUTO</span>' : ''}</span>
                         <span class="text-[10px] text-slate-400">${subLine}</span>
                     </div>
                     <div class="flex items-center space-x-2">
@@ -2125,6 +2362,7 @@
                     document.getElementById('rec-amount').value = item.amount;
                     document.getElementById('rec-currency').value = item.currency;
                     document.getElementById('rec-day').value = item.day || 1;
+                    document.getElementById('rec-auto').checked = !!item.auto;
                 }
             } else {
                 title.innerText = "Új Fix Havi Tranzakció";
@@ -2134,6 +2372,7 @@
                 document.getElementById('rec-category').value = '';
                 document.getElementById('rec-amount').value = '';
                 document.getElementById('rec-day').value = '1';
+                document.getElementById('rec-auto').checked = false;
             }
             toggleRecurringTransfer();
             modal.classList.remove('hidden');
@@ -2152,6 +2391,7 @@
             const amount = parseFloat(document.getElementById('rec-amount').value);
             const currency = document.getElementById('rec-currency').value;
             const day = Math.min(31, Math.max(1, parseInt(document.getElementById('rec-day').value) || 1));
+            const auto = document.getElementById('rec-auto').checked;
 
             if (!name || isNaN(amount) || amount <= 0) {
                 showToast("Érvénytelen megnevezés vagy negatív összeg!", "error");
@@ -2182,10 +2422,11 @@
                     item.amount = amount;
                     item.currency = currency;
                     item.day = day;
+                    item.auto = auto;
                 }
             } else {
                 state.recurringItems.push({
-                    id: Date.now(), name, type, category, account, amount, currency, day
+                    id: Date.now(), name, type, category, account, amount, currency, day, auto
                 });
             }
 
@@ -2214,6 +2455,7 @@
                 category: rec.category,
                 account: rec.account,
                 subtag: rec.name,
+                recId: rec.id,
                 amount: rec.amount,
                 currency: rec.currency
             };
@@ -2221,12 +2463,55 @@
             return tx;
         }
 
+        // Volt-e már erre a hónapra rögzítve a fix tétel (új jelölés vagy régi egyezés alapján)?
+        function recurringExists(rec, txDate) {
+            const monthKey = txDate.slice(0, 7);
+            return state.transactions.some(t =>
+                (t.recId === rec.id && t.date && t.date.startsWith(monthKey)) ||
+                (t.date === txDate && t.category === rec.category && t.amount === rec.amount && t.subtag === rec.name));
+        }
+
+        // Automatikus fix tételek: csak a valódi aktuális hónapra, csak ha az esedékes nap már elérkezett,
+        // és havonta legfeljebb egyszer (akkor sem kerül vissza, ha a tételt utólag kitörölted).
+        function autoApplyRecurring() {
+            if (!state) return 0;
+            const nowD = new Date();
+            const lastDay = new Date(nowD.getFullYear(), nowD.getMonth() + 1, 0).getDate();
+            const today = nowD.getDate();
+            const monthKey = `${nowD.getFullYear()}-${String(nowD.getMonth() + 1).padStart(2, '0')}`;
+            let count = 0;
+            state.recurringItems.forEach(rec => {
+                if (!rec.auto || rec.lastAutoKey === monthKey) return;
+                const day = Math.min(rec.day || 1, lastDay);
+                if (day > today) return;
+                const txDate = `${monthKey}-${String(day).padStart(2, '0')}`;
+                if (!recurringExists(rec, txDate)) {
+                    state.transactions.unshift(buildTxFromRecurring(rec, txDate));
+                    count++;
+                }
+                rec.lastAutoKey = monthKey;
+            });
+            return count;
+        }
+
+        function runAutoRecurring(announce) {
+            const n = autoApplyRecurring();
+            if (n > 0) {
+                renderApp();
+                if (announce) showToast(`${n} fix tétel automatikusan rögzítve erre a hónapra.`, 'success');
+            }
+        }
+
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && state) runAutoRecurring(true);
+        });
+
         function applySingleRecurring(id) {
             const rec = state.recurringItems.find(i => i.id === id);
             if (!rec) return;
 
             const txDate = recurringDate(rec);
-            const exists = state.transactions.some(t => t.date === txDate && t.category === rec.category && t.amount === rec.amount && t.subtag === rec.name);
+            const exists = recurringExists(rec, txDate);
             if (exists) {
                 showToast(`Ez a fix tétel erre a napra (${txDate}) már érvényesítve van!`, "info");
                 return;
@@ -2246,7 +2531,7 @@
             let count = 0;
             state.recurringItems.forEach(rec => {
                 const txDate = recurringDate(rec);
-                const exists = state.transactions.some(t => t.date === txDate && t.category === rec.category && t.amount === rec.amount && t.subtag === rec.name);
+                const exists = recurringExists(rec, txDate);
                 if (!exists) {
                     state.transactions.unshift(buildTxFromRecurring(rec, txDate));
                     count++;
@@ -2339,13 +2624,19 @@
             doc.text(sanitizePdfText(`• Havi Összes Kiadás: -${Math.round(exp).toLocaleString()} Ft`), 14, 53);
             doc.text(sanitizePdfText(`• Havi Nettó Egyenleg: ${inc - exp >= 0 ? '+' : ''}${Math.round(inc - exp).toLocaleString()} Ft`), 14, 59);
 
-            const tableData = filteredTx.map(t => [
-                t.date,
-                sanitizePdfText(t.type === 'income' ? 'Bevétel' : (t.type === 'expense' ? 'Kiadás' : 'Utalás')),
-                sanitizePdfText(`${t.category} ${t.subtag ? '(' + t.subtag + ')' : ''}`),
-                sanitizePdfText(t.account || state.accountsList[0].name),
-                `${t.type === 'income' ? '+' : '-'}${t.amount.toLocaleString()} ${t.currency}`
-            ]);
+            const tableData = filteredTx.map(t => {
+                const src = t.account || state.accountsList[0].name;
+                const isTr = t.type === 'transfer';
+                const label = isTr ? `${src} -> ${txTarget(t)}` : t.category;
+                const sign = t.type === 'income' ? '+' : (isTr ? '' : '-');
+                return [
+                    t.date,
+                    sanitizePdfText(t.type === 'income' ? 'Bevétel' : (t.type === 'expense' ? 'Kiadás' : 'Áthelyezés')),
+                    sanitizePdfText(`${label} ${t.subtag ? '(' + t.subtag + ')' : ''}`),
+                    sanitizePdfText(src),
+                    `${sign}${t.amount.toLocaleString()} ${t.currency}`
+                ];
+            });
 
             doc.autoTable({
                 startY: 68,
@@ -2412,7 +2703,7 @@
         }
 
         function exportUserData() {
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state, null, 2));
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ ...state, password: undefined }, null, 2));
             const dlAnchorElem = document.createElement('a');
             dlAnchorElem.setAttribute("href", dataStr);
             dlAnchorElem.setAttribute("download", `finance_hub_backup_${currentUserEmail}.json`);
@@ -2426,6 +2717,12 @@
         }
 
         function importUserData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            if (!confirm('Az import felülírja a jelenlegi adataidat ebben a fiókban. Folytatod?')) {
+                event.target.value = '';
+                return;
+            }
             const fileReader = new FileReader();
             fileReader.onload = function(e) {
                 try {
@@ -2444,7 +2741,8 @@
                     showToast('Hiba a fájl beolvasásakor!', "error");
                 }
             };
-            fileReader.readAsText(event.target.files[0]);
+            fileReader.readAsText(file);
+            event.target.value = '';
         }
 
         function updateCategoryOptions() {
@@ -2546,15 +2844,153 @@
             return state.transactions.filter(t => t.date && t.date.startsWith(prefix));
         }
 
+        function getTxFilters() {
+            const g = id => { const el = document.getElementById(id); return el ? el.value : ''; };
+            const text = g('txf-search').trim().toLowerCase();
+            const type = g('txf-type');
+            const account = g('txf-account');
+            const all = !!(document.getElementById('txf-all') && document.getElementById('txf-all').checked);
+            return { text, type, account, all, active: !!(text || type || account || all) };
+        }
+
+        function txMatchesFilters(t, f) {
+            const src = t.account || state.accountsList[0].name;
+            const tgt = t.type === 'transfer' ? txTarget(t) : '';
+            if (f.type && t.type !== f.type) return false;
+            if (f.account && src !== f.account && tgt !== f.account) return false;
+            if (f.text) {
+                const hay = [t.category, t.subtag, src, tgt, t.date, String(t.amount), t.currency].join(' ').toLowerCase();
+                if (!hay.includes(f.text)) return false;
+            }
+            return true;
+        }
+
+        function clearTxFilters() {
+            ['txf-search', 'txf-type', 'txf-account'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+            const all = document.getElementById('txf-all');
+            if (all) all.checked = false;
+            renderTransactions();
+        }
+
+        function populateTxFilterAccounts() {
+            const sel = document.getElementById('txf-account');
+            if (!sel) return;
+            const sig = state.accountsList.map(a => a.name).join('|');
+            if (sel.dataset.sig === sig) return;
+            const cur = sel.value;
+            sel.innerHTML = '<option value="">Minden számla</option>';
+            state.accountsList.forEach(a => sel.appendChild(new Option(a.name, a.name)));
+            sel.value = state.accountsList.some(a => a.name === cur) ? cur : '';
+            sel.dataset.sig = sig;
+        }
+
+        // ----- Tranzakció szerkesztése -----
+        function fillEditTxCategories(type, selected) {
+            const sel = document.getElementById('etx-category');
+            const src = document.getElementById('etx-account').value;
+            let opts;
+            if (type === 'expense') opts = Object.keys(state.budgetLimits);
+            else if (type === 'income') opts = ['Fizetés', 'Mellékállás', 'Befektetési Hozam', 'Egyéb Bevétel'];
+            else opts = state.accountsList.map(a => a.name).filter(n => n !== src);
+            if (type !== 'transfer' && selected && !opts.includes(selected)) opts.push(selected);
+            if (!opts.length) opts = ['Egyéb Kiadás'];
+            sel.innerHTML = '';
+            opts.forEach(o => sel.appendChild(new Option(o, o)));
+            if (selected && opts.includes(selected)) sel.value = selected;
+            document.getElementById('etx-category-label').innerText = type === 'transfer' ? 'Cél számla (ide megy)' : 'Kategória';
+            document.getElementById('etx-account-label').innerText = type === 'transfer' ? 'Forrás számla (innen megy)' : 'Számla';
+        }
+
+        function onEditTxTypeChange() {
+            const type = document.getElementById('etx-type').value;
+            const prev = document.getElementById('etx-category').value;
+            fillEditTxCategories(type, prev);
+        }
+
+        function openEditTxModal(id) {
+            const t = state.transactions.find(x => x.id === id);
+            if (!t) return;
+            document.getElementById('etx-id').value = t.id;
+            document.getElementById('etx-date').value = t.date;
+            document.getElementById('etx-type').value = t.type;
+            const accSel = document.getElementById('etx-account');
+            accSel.innerHTML = '';
+            state.accountsList.forEach(a => accSel.appendChild(new Option(a.name, a.name)));
+            accSel.value = t.account || state.accountsList[0].name;
+            const cur = document.getElementById('etx-currency');
+            cur.innerHTML = '';
+            Object.keys(FX_RATES).forEach(c => cur.appendChild(new Option(c, c)));
+            cur.value = t.currency;
+            document.getElementById('etx-subtag').value = t.subtag || '';
+            document.getElementById('etx-amount').value = t.amount;
+            fillEditTxCategories(t.type, t.type === 'transfer' ? txTarget(t) : t.category);
+            document.getElementById('edit-tx-modal').classList.remove('hidden');
+        }
+
+        function closeEditTxModal() {
+            document.getElementById('edit-tx-modal').classList.add('hidden');
+        }
+
+        function saveEditTx() {
+            const t = state.transactions.find(x => String(x.id) === document.getElementById('etx-id').value);
+            if (!t) { closeEditTxModal(); return; }
+            const date = document.getElementById('etx-date').value;
+            const type = document.getElementById('etx-type').value;
+            const account = document.getElementById('etx-account').value;
+            const category = document.getElementById('etx-category').value;
+            const subtag = document.getElementById('etx-subtag').value.trim();
+            const amount = parseFloat(document.getElementById('etx-amount').value);
+            const currency = document.getElementById('etx-currency').value;
+
+            if (!date) { showToast('Válassz érvényes dátumot!', 'error'); return; }
+            if (isNaN(amount) || amount <= 0) { showToast('Az összeg csak 0-nál nagyobb pozitív érték lehet!', 'error'); return; }
+            const srcAcc = state.accountsList.find(a => a.name === account);
+            if (srcAcc && srcAcc.type === 'locked' && type === 'expense') {
+                showToast('Zárolt számláról nem lehet kiadást rögzíteni!', 'error');
+                return;
+            }
+            if (type === 'transfer' && (!category || category === account || !state.accountsList.some(a => a.name === category))) {
+                showToast('Az áthelyezésnél a forrás és a cél számla nem lehet ugyanaz!', 'error');
+                return;
+            }
+
+            t.date = date; t.type = type; t.account = account; t.category = category;
+            t.subtag = subtag; t.amount = amount; t.currency = currency;
+            if (type === 'transfer') t.toAccount = category; else delete t.toAccount;
+
+            closeEditTxModal();
+            jumpToDatePeriod(date);
+            renderApp();
+            showToast('Tranzakció módosítva.', 'success');
+        }
+
         function renderTransactions() {
             const tbody = document.getElementById('tx-table-body');
             if (!tbody) return;
             tbody.innerHTML = '';
 
-            const filtered = getFilteredTransactions().slice().sort((a, b) => b.date.localeCompare(a.date));
+            populateTxFilterAccounts();
+            const f = getTxFilters();
+            const base = f.all ? state.transactions.filter(t => t.date) : getFilteredTransactions();
+            const filtered = base.filter(t => txMatchesFilters(t, f)).sort((a, b) => b.date.localeCompare(a.date));
+
+            let fInc = 0, fExp = 0;
+            filtered.forEach(t => {
+                const v = t.amount * (FX_RATES[t.currency] || 1);
+                if (t.type === 'income') fInc += v; else if (t.type === 'expense') fExp += v;
+            });
+            const sumEl = document.getElementById('txf-summary');
+            if (sumEl) {
+                sumEl.innerText = filtered.length
+                    ? `${filtered.length} tétel • bevétel +${Math.round(fInc).toLocaleString()} Ft • kiadás −${Math.round(fExp).toLocaleString()} Ft`
+                    : '';
+            }
 
             if (filtered.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-500">Nincs rögzített tranzakció ebben a hónapban (${selectedYear}. ${monthNames[selectedMonth-1]}).</td></tr>`;
+                const msg = f.active
+                    ? 'Nincs a szűrésnek megfelelő tranzakció.'
+                    : `Nincs rögzített tranzakció ebben a hónapban (${selectedYear}. ${monthNames[selectedMonth-1]}).`;
+                tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-500">${msg}</td></tr>`;
                 return;
             }
 
@@ -2564,7 +3000,7 @@
                 let typeText = 'KIADÁS';
                 let amountPrefix = '-';
                 const srcName = t.account || state.accountsList[0].name;
-                let categoryHtml = `${t.category} ${t.subtag ? `<span class="text-[10px] text-indigo-400 ml-1">(${t.subtag})</span>` : ''}`;
+                let categoryHtml = `${esc(t.category)} ${t.subtag ? `<span class="text-[10px] text-indigo-400 ml-1">(${esc(t.subtag)})</span>` : ''}`;
 
                 if (t.type === 'income') {
                     badgeClass = 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20';
@@ -2572,7 +3008,7 @@
                 } else if (t.type === 'transfer') {
                     badgeClass = 'bg-sky-500/10 text-sky-500 border-sky-500/20';
                     typeText = 'ÁTHELYEZÉS'; amountPrefix = '↔ ';
-                    categoryHtml = `${srcName} → ${txTarget(t)} ${t.subtag ? `<span class="text-[10px] text-indigo-400 ml-1">(${t.subtag})</span>` : ''}`;
+                    categoryHtml = `${esc(srcName)} → ${esc(txTarget(t))} ${t.subtag ? `<span class="text-[10px] text-indigo-400 ml-1">(${esc(t.subtag)})</span>` : ''}`;
                     if (!isValidTransfer(t)) {
                         categoryHtml += ` <span class="text-[10px] text-amber-400 ml-1" title="Azonos forrás és cél számla, vagy nem létező számla: az egyenlegekre nincs hatása. Töröld és rögzítsd újra.">⚠ nincs hatása</span>`;
                     }
@@ -2582,12 +3018,15 @@
                     <td class="p-2.5 text-slate-400 whitespace-nowrap">${t.date}</td>
                     <td class="p-2.5 whitespace-nowrap"><span class="px-2 py-0.5 rounded border text-[10px] ${badgeClass}">${typeText}</span></td>
                     <td class="p-2.5 font-medium text-white whitespace-nowrap">${categoryHtml}</td>
-                    <td class="p-2.5 text-slate-400 text-[11px] whitespace-nowrap">${srcName}</td>
+                    <td class="p-2.5 text-slate-400 text-[11px] whitespace-nowrap">${esc(srcName)}</td>
                     <td class="p-2.5 font-bold whitespace-nowrap ${t.type === 'income' ? 'text-emerald-500' : (t.type === 'expense' ? 'text-rose-500' : 'text-sky-500')}">
                         ${amountPrefix}${t.amount.toLocaleString()} ${t.currency}
                     </td>
                     <td class="p-2.5 text-right whitespace-nowrap">
-                        <button onclick="deleteTransaction(${t.id})" class="text-slate-500 hover:text-rose-400 p-1">
+                        <button onclick="openEditTxModal(${t.id})" class="text-slate-500 hover:text-indigo-400 p-1" title="Szerkesztés">
+                            <i data-lucide="pencil" class="w-4 h-4"></i>
+                        </button>
+                        <button onclick="deleteTransaction(${t.id})" class="text-slate-500 hover:text-rose-400 p-1" title="Törlés">
                             <i data-lucide="trash-2" class="w-4 h-4"></i>
                         </button>
                     </td>
@@ -2716,6 +3155,79 @@
             renderWealthTrendChart();
         }
 
+        function monthTotals(y, m) {
+            const key = `${y}-${String(m).padStart(2, '0')}`;
+            const cats = {};
+            let inc = 0, exp = 0;
+            state.transactions.forEach(t => {
+                if (!t.date || !t.date.startsWith(key)) return;
+                const v = t.amount * (FX_RATES[t.currency] || 1);
+                if (t.type === 'income') inc += v;
+                else if (t.type === 'expense') { exp += v; cats[t.category] = (cats[t.category] || 0) + v; }
+            });
+            return { inc, exp, cats, saved: getMonthSaved(y, m).total };
+        }
+
+        function deltaHtml(cur, prev, goodWhenUp) {
+            const d = cur - prev;
+            if (Math.abs(d) < 0.5) return '<span class="text-slate-400">± 0</span>';
+            const up = d > 0;
+            const good = up === goodWhenUp;
+            const pct = prev > 0 ? ` (${up ? '+' : ''}${((d / prev) * 100).toFixed(0)}%)` : ' (új)';
+            return `<span class="${good ? 'text-emerald-500' : 'text-rose-500'}">${up ? '▲' : '▼'} ${up ? '+' : ''}${Math.round(d).toLocaleString()} Ft${pct}</span>`;
+        }
+
+        function renderMonthComparison() {
+            const body = document.getElementById('mom-table-body');
+            if (!body) return;
+            const prevY = selectedMonth === 1 ? selectedYear - 1 : selectedYear;
+            const prevM = selectedMonth === 1 ? 12 : selectedMonth - 1;
+            const cur = monthTotals(selectedYear, selectedMonth);
+            const prev = monthTotals(prevY, prevM);
+
+            document.getElementById('mom-title').innerText =
+                `${selectedYear}. ${monthNames[selectedMonth - 1]} és ${prevY}. ${monthNames[prevM - 1]}`;
+
+            const cards = [
+                { label: 'Bevétel', c: cur.inc, p: prev.inc, goodUp: true },
+                { label: 'Kiadás', c: cur.exp, p: prev.exp, goodUp: false },
+                { label: 'Megtakarítás', c: cur.saved, p: prev.saved, goodUp: true }
+            ];
+            document.getElementById('mom-summary').innerHTML = cards.map(k => `
+                <div class="p-3 bg-slate-900/60 rounded-lg border border-slate-800">
+                    <div class="text-slate-400">${k.label}</div>
+                    <div class="text-base font-bold text-white mt-0.5">${Math.round(k.c).toLocaleString()} Ft</div>
+                    <div class="text-[11px] mt-0.5">${deltaHtml(k.c, k.p, k.goodUp)} <span class="text-slate-500">• előző: ${Math.round(k.p).toLocaleString()} Ft</span></div>
+                </div>`).join('');
+
+            const names = Array.from(new Set([...Object.keys(cur.cats), ...Object.keys(prev.cats)]))
+                .sort((a, b) => (cur.cats[b] || 0) - (cur.cats[a] || 0) || (prev.cats[b] || 0) - (prev.cats[a] || 0));
+            body.innerHTML = '';
+            if (!names.length) {
+                body.innerHTML = '<tr><td colspan="5" class="p-3 text-center text-slate-500">Egyik hónapban sincs rögzített kiadás.</td></tr>';
+            } else {
+                const max = Math.max(1, ...names.map(n => Math.max(cur.cats[n] || 0, prev.cats[n] || 0)));
+                names.forEach(n => {
+                    const c = cur.cats[n] || 0, p = prev.cats[n] || 0;
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td class="p-2 font-medium text-white">${esc(n)}</td>
+                        <td class="p-2 text-slate-400 whitespace-nowrap">${Math.round(p).toLocaleString()} Ft</td>
+                        <td class="p-2 text-white whitespace-nowrap">${Math.round(c).toLocaleString()} Ft</td>
+                        <td class="p-2 whitespace-nowrap">${deltaHtml(c, p, false)}</td>
+                        <td class="p-2">
+                            <div class="h-1.5 rounded-full bg-slate-700 mb-1" style="width:${(p / max) * 100}%"></div>
+                            <div class="h-1.5 rounded-full bg-indigo-500" style="width:${(c / max) * 100}%"></div>
+                        </td>`;
+                    body.appendChild(tr);
+                });
+            }
+            const isCurrent = selectedYear === CURRENT_YEAR && selectedMonth === CURRENT_MONTH;
+            document.getElementById('mom-note').innerText = (isCurrent
+                ? 'Az aktuális hónap még nem ért véget, ezért a kiadások várhatóan tovább nőnek az előző teljes hónaphoz képest. '
+                : '') + 'Szürke sáv: előző hónap, kék sáv: kiválasztott hónap. Áthelyezések nem számítanak kiadásnak.';
+        }
+
         function renderChart() {
             const ctx = document.getElementById('expenseChart').getContext('2d');
             const categories = {};
@@ -2727,7 +3239,7 @@
 
             const labels = Object.keys(categories);
             const data = Object.values(categories);
-            const colors = ['#6366f1', '#10b981', '#f43f5e', '#38bdf8', '#a855f7'];
+            const colors = ['#6366f1', '#10b981', '#f43f5e', '#38bdf8', '#a855f7', '#f59e0b', '#14b8a6', '#ec4899', '#84cc16', '#f97316'];
 
             if (chartInstance) chartInstance.destroy();
 
@@ -2758,8 +3270,8 @@
                     const item = document.createElement('div');
                     item.className = 'flex justify-between items-center text-xs';
                     item.innerHTML = `
-                        <span class="flex items-center"><span class="w-2.5 h-2.5 rounded-full mr-2" style="background:${colors[idx % colors.length]}"></span>${lbl}</span>
-                        <span class="font-bold text-white">${categories[lbl].toLocaleString()} Ft</span>
+                        <span class="flex items-center"><span class="w-2.5 h-2.5 rounded-full mr-2" style="background:${colors[idx % colors.length]}"></span>${esc(lbl)}</span>
+                        <span class="font-bold text-white">${Math.round(categories[lbl]).toLocaleString()} Ft</span>
                     `;
                     legend.appendChild(item);
                 });
@@ -2772,11 +3284,10 @@
             const ctx = canvasEl.getContext('2d');
 
             const w = computeWealthAt(selectedYear, selectedMonth);
-            const liquid = w.liquid, emergency = w.emergency, locked = w.locked, investments = w.independent;
-
-            const total = liquid + emergency + locked + investments;
-            const data = [liquid, emergency, locked, investments];
-            const labels = ['Likvid Számlák', 'Vészhelyzeti Alap', 'Zárolt Vagyon', 'Befektetési Portfólió'];
+            const bk = w.buckets;
+            const total = w.total;
+            const data = [bk.liquid, bk.emergency, bk.locked, bk.portfolio];
+            const labels = ['Likvid Számlák', 'Vészhelyzeti Alap', 'Zárolt Megtakarítás', 'Befektetési Portfólió'];
             const colors = ['#6366f1', '#f59e0b', '#a855f7', '#10b981'];
 
             if (assetAllocationChartInstance) assetAllocationChartInstance.destroy();
@@ -2786,7 +3297,7 @@
                 data: {
                     labels,
                     datasets: [{
-                        data: total > 0 ? data : [1, 0, 0, 0],
+                        data: total > 0 ? data.map(v => Math.max(0, v)) : [1, 0, 0, 0],
                         backgroundColor: colors,
                         borderWidth: 0
                     }]
@@ -2819,6 +3330,11 @@
                 `;
                 legendEl.appendChild(div);
             });
+
+            const note = document.createElement('p');
+            note.className = 'text-[10px] text-slate-500 leading-snug pt-1';
+            note.innerText = 'A Befektetési Portfólió a „Befektetések” menüben portfólióként jelölt tételeket (pl. ETF, alap) tartalmazza; a készpénz jellegű megtakarítások a Zárolt / Vészhelyzeti sávban maradnak.';
+            legendEl.appendChild(note);
         }
 
         function renderWealthTrendChart() {
@@ -2880,18 +3396,7 @@
             const ctx = canvasEl.getContext('2d');
             const labels = ['Jan', 'Feb', 'Már', 'Ápr', 'Máj', 'Jún', 'Júl', 'Aug', 'Sze', 'Okt', 'Nov', 'Dec'];
 
-            const dataValues = labels.map((_, idx) => {
-                const currentMonthNum = idx + 1;
-                let totalInvHufForMonth = 0;
-
-                state.investments.forEach(inv => {
-                    if (invStarted(inv, selectedYear, currentMonthNum)) {
-                        totalInvHufForMonth += inv.current * (FX_RATES[inv.currency] || 1);
-                    }
-                });
-
-                return Math.round(totalInvHufForMonth);
-            });
+            const dataValues = labels.map((_, idx) => Math.round(computeWealthAt(selectedYear, idx + 1).invTracked));
 
             if (invTrendChartInstance) invTrendChartInstance.destroy();
 
@@ -2932,52 +3437,117 @@
             });
         }
 
+        // Zárolt / vészhelyzeti számlára érkező (vagy onnan kimenő) átvezetések: a számla első, már induló befektetéséhez
+        // adódnak hozzá. Ha a számlához nincs befektetés rögzítve, külön automatikus sor jelenik meg.
+        function getInvestmentExtras(w) {
+            const extras = {};
+            const virtual = [];
+            state.accountsList.forEach(acc => {
+                if (acc.type === 'liquid') return;
+                const net = w.txNet[acc.name] || 0;
+                if (Math.abs(net) < 0.5) return;
+                const primary = state.investments.find(i => i.type === acc.name && invStarted(i, selectedYear, selectedMonth));
+                if (primary) extras[primary.id] = net;
+                else virtual.push({ account: acc.name, amount: net });
+            });
+            return { extras, virtual };
+        }
+
         function renderInvestments() {
             const tbody = document.getElementById('investments-table-body');
             if (!tbody) return;
             tbody.innerHTML = '';
 
-            if (state.investments.length === 0) {
+            const w = computeWealthAt(selectedYear, selectedMonth);
+            const { extras, virtual } = getInvestmentExtras(w);
+
+            if (state.investments.length === 0 && virtual.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-slate-500">Még nem vettél fel befektetést.</td></tr>`;
                 return;
             }
 
+            const fmt = n => Math.round(n).toLocaleString();
+            const signed = n => `${n > 0 ? '+' : ''}${fmt(n)}`;
+            let totalInvested = 0, totalCurrent = 0;
+
             state.investments.forEach(inv => {
                 const tr = document.createElement('tr');
-                const investedHuf = inv.invested * (FX_RATES[inv.currency] || 1);
-                const currentHuf = inv.current * (FX_RATES[inv.currency] || 1);
+                const rate = FX_RATES[inv.currency] || 1;
+                const extra = extras[inv.id] || 0;
+                const started = invStarted(inv, selectedYear, selectedMonth);
+                const investedHuf = inv.invested * rate + extra;
+                const curVal = invValueAt(inv, selectedYear, selectedMonth);
+                const currentHuf = curVal * rate + extra;
                 const createdM = inv.createdMonth || 1;
                 const createdY = inv.createdYear || CURRENT_YEAR;
 
-                let calculatedRoi = 0;
-                if (inv.invested > 0) {
-                    calculatedRoi = ((inv.current - inv.invested) / inv.invested) * 100;
+                const calculatedRoi = investedHuf > 0 ? ((currentHuf - investedHuf) / investedHuf) * 100 : 0;
+                const extraBadge = extra
+                    ? ` <span class="text-sky-400 text-[10px]" title="A(z) ${esc(inv.type)} számlára / számláról történt átvezetésekből, automatikusan">${signed(extra)} Ft átvezetés</span>`
+                    : '';
+
+                let investedDisplay, currentDisplay;
+                if (inv.currency === 'HUF') {
+                    investedDisplay = `${fmt(investedHuf)} HUF`;
+                    currentDisplay = `${fmt(currentHuf)} HUF`;
+                } else {
+                    investedDisplay = `${inv.invested.toLocaleString()} ${esc(inv.currency)} <span class="text-slate-400 text-[10px]">(${fmt(investedHuf)} Ft)</span>`;
+                    currentDisplay = `${curVal.toLocaleString()} ${esc(inv.currency)} <span class="text-slate-400 text-[10px]">(${fmt(currentHuf)} Ft)</span>`;
+                }
+                if (extra) {
+                    investedDisplay += extraBadge;
+                    currentDisplay += extraBadge;
                 }
 
-                let investedDisplay = `${inv.invested.toLocaleString()} ${inv.currency}`;
-                let currentDisplay = `${inv.current.toLocaleString()} ${inv.currency}`;
-
-                if (inv.currency !== 'HUF') {
-                    investedDisplay += ` <span class="text-slate-400 text-[10px]">(${Math.round(investedHuf).toLocaleString()} Ft)</span>`;
-                    currentDisplay += ` <span class="text-slate-400 text-[10px]">(${Math.round(currentHuf).toLocaleString()} Ft)</span>`;
-                }
-
+                if (started) { totalInvested += investedHuf; totalCurrent += currentHuf; }
                 const isPosRoi = calculatedRoi >= 0;
+                const kindBadge = inv.kind === 'savings'
+                    ? '<span class="text-[9px] px-1 rounded bg-amber-500/15 text-amber-300 ml-1">megtakarítás</span>'
+                    : '<span class="text-[9px] px-1 rounded bg-emerald-500/15 text-emerald-300 ml-1">portfólió</span>';
 
+                tr.className = started ? '' : 'opacity-50';
                 tr.innerHTML = `
-                    <td class="p-3 font-bold text-white whitespace-nowrap">${inv.name}</td>
-                    <td class="p-3 text-slate-400 whitespace-nowrap">${inv.type}</td>
-                    <td class="p-3 text-indigo-400 font-semibold whitespace-nowrap">${createdY}. ${monthNames[createdM - 1]}</td>
+                    <td class="p-3 font-bold text-white whitespace-nowrap">${esc(inv.name)}${kindBadge}</td>
+                    <td class="p-3 text-slate-400 whitespace-nowrap">${esc(inv.type)}</td>
+                    <td class="p-3 text-indigo-400 font-semibold whitespace-nowrap">${createdY}. ${monthNames[createdM - 1]}${started ? '' : ' <span class="text-[10px] text-slate-500">(még nem indult)</span>'}</td>
                     <td class="p-3 whitespace-nowrap">${investedDisplay}</td>
                     <td class="p-3 font-bold text-emerald-500 whitespace-nowrap">${currentDisplay}</td>
                     <td class="p-3 font-semibold whitespace-nowrap ${isPosRoi ? 'text-emerald-500' : 'text-rose-500'}">${isPosRoi ? '+' : ''}${calculatedRoi.toFixed(2)}%</td>
                     <td class="p-3 text-right space-x-2 whitespace-nowrap">
+                        <button onclick="openInvValueModal(${inv.id})" class="text-emerald-400 hover:text-emerald-300 font-medium" title="Havi értékfrissítés rögzítése">Érték${inv.history && inv.history.length ? ' (' + inv.history.length + ')' : ''}</button>
                         <button onclick="openInvestmentModal(${inv.id})" class="text-indigo-400 hover:text-indigo-300 font-medium">Szerkeszt</button>
                         <button onclick="deleteInvestment(${inv.id})" class="text-slate-500 hover:text-rose-400">Törlés</button>
                     </td>
                 `;
                 tbody.appendChild(tr);
             });
+
+            virtual.forEach(v => {
+                totalInvested += v.amount; totalCurrent += v.amount;
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="p-3 font-bold text-white whitespace-nowrap">${esc(v.account)} <span class="text-[9px] px-1 rounded bg-sky-500/15 text-sky-300 ml-1">átvezetések</span></td>
+                    <td class="p-3 text-slate-400 whitespace-nowrap">${esc(v.account)}</td>
+                    <td class="p-3 text-slate-500 whitespace-nowrap">—</td>
+                    <td class="p-3 whitespace-nowrap">${fmt(v.amount)} HUF</td>
+                    <td class="p-3 font-bold text-emerald-500 whitespace-nowrap">${fmt(v.amount)} HUF</td>
+                    <td class="p-3 font-semibold text-slate-400 whitespace-nowrap">0.00%</td>
+                    <td class="p-3 text-right text-[10px] text-slate-500 whitespace-nowrap">automatikus (tranzakciókból)</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            const totalRoi = totalInvested > 0 ? ((totalCurrent - totalInvested) / totalInvested) * 100 : 0;
+            const trTotal = document.createElement('tr');
+            trTotal.className = 'bg-slate-900/60 font-bold';
+            trTotal.innerHTML = `
+                <td class="p-3 text-white" colspan="3">Összesen (${selectedYear}. ${monthNames[selectedMonth - 1]} végén)</td>
+                <td class="p-3 text-white whitespace-nowrap">${fmt(totalInvested)} Ft</td>
+                <td class="p-3 text-emerald-400 whitespace-nowrap">${fmt(totalCurrent)} Ft</td>
+                <td class="p-3 whitespace-nowrap ${totalRoi >= 0 ? 'text-emerald-500' : 'text-rose-500'}">${totalRoi >= 0 ? '+' : ''}${totalRoi.toFixed(2)}%</td>
+                <td class="p-3"></td>
+            `;
+            tbody.appendChild(trTotal);
         }
 
         function openInvestmentModal(id = null) {
@@ -3008,15 +3578,17 @@
                 document.getElementById('inv-edit-id').value = inv.id;
                 document.getElementById('inv-name').value = inv.name;
                 typeSelect.value = inv.type;
+                document.getElementById('inv-kind').value = inv.kind || 'portfolio';
                 yearSel.value = inv.createdYear || CURRENT_YEAR;
                 document.getElementById('inv-created-month').value = inv.createdMonth || 1;
                 document.getElementById('inv-invested').value = inv.invested;
-                document.getElementById('inv-current').value = inv.current;
+                document.getElementById('inv-current').value = invValueAt(inv, selectedYear, selectedMonth);
                 document.getElementById('inv-currency').value = inv.currency;
             } else {
                 title.innerText = "Új Befektetés Hozzáadása";
                 document.getElementById('inv-edit-id').value = '';
                 document.getElementById('inv-name').value = '';
+                document.getElementById('inv-kind').value = 'portfolio';
                 yearSel.value = selectedYear;
                 document.getElementById('inv-created-month').value = selectedMonth;
                 document.getElementById('inv-invested').value = '';
@@ -3039,6 +3611,7 @@
             const invested = parseFloat(document.getElementById('inv-invested').value);
             const current = parseFloat(document.getElementById('inv-current').value);
             const currency = document.getElementById('inv-currency').value;
+            const kind = document.getElementById('inv-kind').value === 'savings' ? 'savings' : 'portfolio';
 
             if (!name) {
                 showToast("Kérlek add meg a befektetés nevét!", "error");
@@ -3058,19 +3631,99 @@
                     inv.createdYear = createdYear;
                     inv.createdMonth = createdMonth;
                     inv.invested = invested;
-                    inv.current = current;
                     inv.currency = currency;
+                    if (inv.history && inv.history.length) {
+                        // van havi előzmény: a megadott érték a kiválasztott hónapra rögzül
+                        if (Math.abs(current - invValueAt(inv, selectedYear, selectedMonth)) > 1e-9) {
+                            upsertInvHistory(inv, selectedYear, selectedMonth, current);
+                        }
+                        syncInvCurrent(inv);
+                    } else {
+                        inv.current = current;
+                    }
+                    inv.kind = kind;
                 }
             } else {
                 state.investments.push({
                     id: Date.now(),
-                    name, type, createdYear, createdMonth, invested, current, currency
+                    name, type, kind, createdYear, createdMonth, invested, current, currency, history: []
                 });
             }
 
             closeInvestmentModal();
             renderApp();
             showToast("Befektetési tétel sikeresen elmentve!", "success");
+        }
+
+        function openInvValueModal(id) {
+            const inv = state.investments.find(i => i.id === id);
+            if (!inv) return;
+            document.getElementById('ivm-id').value = inv.id;
+            document.getElementById('ivm-name').innerText = inv.name;
+            document.getElementById('ivm-cur').innerText = inv.currency;
+            const ys = document.getElementById('ivm-year');
+            ys.innerHTML = '';
+            for (let y = CURRENT_YEAR - 10; y <= CURRENT_YEAR + 2; y++) ys.appendChild(new Option(y, y));
+            const ms = document.getElementById('ivm-month');
+            ms.innerHTML = '';
+            monthNames.forEach((n, i) => ms.appendChild(new Option(n, i + 1)));
+            ys.value = selectedYear;
+            ms.value = selectedMonth;
+            document.getElementById('ivm-amount').value = invValueAt(inv, selectedYear, selectedMonth);
+            renderInvValueHistory(inv);
+            document.getElementById('inv-value-modal').classList.remove('hidden');
+        }
+
+        function closeInvValueModal() {
+            document.getElementById('inv-value-modal').classList.add('hidden');
+        }
+
+        function renderInvValueHistory(inv) {
+            const box = document.getElementById('ivm-history');
+            box.innerHTML = '';
+            const h = (inv.history || []).slice().sort((a, b) => (b.year * 12 + b.month) - (a.year * 12 + a.month));
+            if (!h.length) {
+                box.innerHTML = '<div class="text-slate-500">Még nincs havi értékfrissítés — az érték minden hónapban a jelenlegi értéken áll.</div>';
+                return;
+            }
+            h.forEach(e => {
+                const row = document.createElement('div');
+                row.className = 'flex justify-between items-center p-1.5 bg-slate-900/60 rounded border border-slate-800';
+                row.innerHTML = `<span class="text-slate-300">${e.year}. ${monthNames[e.month - 1]}</span>
+                    <span class="font-bold text-white">${e.value.toLocaleString()} ${esc(inv.currency)}</span>
+                    <button onclick="deleteInvValueEntry(${e.year}, ${e.month})" class="text-slate-500 hover:text-rose-400">Törlés</button>`;
+                box.appendChild(row);
+            });
+        }
+
+        function saveInvValue() {
+            const inv = state.investments.find(i => i.id === parseInt(document.getElementById('ivm-id').value));
+            if (!inv) return;
+            const year = parseInt(document.getElementById('ivm-year').value);
+            const month = parseInt(document.getElementById('ivm-month').value);
+            const value = parseFloat(document.getElementById('ivm-amount').value);
+            if (isNaN(value) || value < 0) {
+                showToast('Adj meg érvényes, nem negatív értéket!', 'error');
+                return;
+            }
+            if (!invStarted(inv, year, month)) {
+                showToast('Az érték nem rögzíthető a befektetés kezdő hónapja előtt!', 'error');
+                return;
+            }
+            upsertInvHistory(inv, year, month, value);
+            syncInvCurrent(inv);
+            renderInvValueHistory(inv);
+            renderApp();
+            showToast(`${year}. ${monthNames[month - 1]} érték rögzítve.`, 'success');
+        }
+
+        function deleteInvValueEntry(year, month) {
+            const inv = state.investments.find(i => i.id === parseInt(document.getElementById('ivm-id').value));
+            if (!inv) return;
+            inv.history = (inv.history || []).filter(e => !(e.year === year && e.month === month));
+            if (inv.history.length) syncInvCurrent(inv);
+            renderInvValueHistory(inv);
+            renderApp();
         }
 
         function deleteInvestment(id) {
@@ -3098,22 +3751,24 @@
 
             categories.forEach(cat => {
                 const limit = state.budgetLimits[cat];
-                const spent = spentBy[cat] || 0;
+                const isSaving = cat === 'Megtakarítás';
+                // A „Megtakarítás” keret a havi félretett összegből (átvezetések) töltődik, nem kiadásból
+                const spent = isSaving ? getMonthSaved(selectedYear, selectedMonth).total + (spentBy[cat] || 0) : (spentBy[cat] || 0);
                 const pct = Math.min(100, (spent / limit) * 100);
 
                 const item = document.createElement('div');
                 item.className = 'p-4 bg-slate-900/60 rounded-lg border border-slate-800 space-y-2';
                 item.innerHTML = `
                     <div class="flex justify-between items-center text-xs font-semibold">
-                        <span class="text-white font-bold">${cat}</span>
+                        <span class="text-white font-bold">${esc(cat)}</span>
                         <div class="flex items-center space-x-2">
                             <span class="text-slate-400">${Math.round(spent).toLocaleString()} / ${limit.toLocaleString()} Ft</span>
-                            <button onclick="openBudgetModal('${cat}')" class="text-indigo-400 hover:text-indigo-300 text-[11px] ml-2">Szerkeszt</button>
-                            <button onclick="deleteBudget('${cat}')" class="text-slate-500 hover:text-rose-400 text-[11px]">Törlés</button>
+                            <button data-cat="${esc(cat)}" onclick="openBudgetModal(this.dataset.cat)" class="text-indigo-400 hover:text-indigo-300 text-[11px] ml-2">Szerkeszt</button>
+                            <button data-cat="${esc(cat)}" onclick="deleteBudget(this.dataset.cat)" class="text-slate-500 hover:text-rose-400 text-[11px]">Törlés</button>
                         </div>
                     </div>
                     <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
-                        <div class="${pct >= 100 ? 'bg-rose-500' : 'bg-indigo-500'} h-full rounded-full transition-all duration-300" style="width: ${pct}%"></div>
+                        <div class="${pct >= 100 ? (isSaving ? 'bg-emerald-500' : 'bg-rose-500') : 'bg-indigo-500'} h-full rounded-full transition-all duration-300" style="width: ${pct}%"></div>
                     </div>
                 `;
                 container.appendChild(item);
@@ -3124,10 +3779,10 @@
                 item.className = 'p-4 bg-amber-500/5 rounded-lg border border-amber-500/30 space-y-2';
                 item.innerHTML = `
                     <div class="flex justify-between items-center text-xs font-semibold">
-                        <span class="text-white font-bold">${cat} <span class="text-[10px] text-amber-400 ml-1">keret nélkül</span></span>
+                        <span class="text-white font-bold">${esc(cat)} <span class="text-[10px] text-amber-400 ml-1">keret nélkül</span></span>
                         <div class="flex items-center space-x-2">
                             <span class="text-slate-400">${Math.round(spentBy[cat]).toLocaleString()} Ft</span>
-                            <button onclick="openBudgetModalFor('${cat}')" class="text-indigo-400 hover:text-indigo-300 text-[11px] ml-2">Keret beállítása</button>
+                            <button data-cat="${esc(cat)}" onclick="openBudgetModalFor(this.dataset.cat)" class="text-indigo-400 hover:text-indigo-300 text-[11px] ml-2">Keret beállítása</button>
                         </div>
                     </div>
                 `;
@@ -3347,3 +4002,4 @@
     </script>
 </body>
 </html>
+
