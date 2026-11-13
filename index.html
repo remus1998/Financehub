@@ -13,6 +13,8 @@
     <!-- jsPDF CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
+    <!-- PDF.js (bankszámlakivonat olvasás) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
         .custom-scrollbar::-webkit-scrollbar {
             width: 6px;
@@ -141,6 +143,9 @@
                         <button id="tab-transactions" onclick="switchTab('transactions')" class="w-full md:w-auto text-left md:text-center whitespace-nowrap px-3 py-2 md:py-1.5 rounded-md font-medium transition-all text-slate-400 hover:text-white hover:bg-slate-900 md:hover:bg-transparent">
                             <i data-lucide="arrow-left-right" class="w-3.5 h-3.5 inline mr-1.5"></i>Tranzakciók
                         </button>
+                        <button id="tab-import" onclick="switchTab('import')" class="w-full md:w-auto text-left md:text-center whitespace-nowrap px-3 py-2 md:py-1.5 rounded-md font-medium transition-all text-slate-400 hover:text-white hover:bg-slate-900 md:hover:bg-transparent">
+                            <i data-lucide="file-up" class="w-3.5 h-3.5 inline mr-1.5"></i>Banki import<span id="imp-badge" class="hidden ml-1.5 px-1.5 py-0.5 rounded-full bg-amber-500 text-[9px] font-bold text-slate-900">0</span>
+                        </button>
                         <button id="tab-annual" onclick="switchTab('annual')" class="w-full md:w-auto text-left md:text-center whitespace-nowrap px-3 py-2 md:py-1.5 rounded-md font-medium transition-all text-slate-400 hover:text-white hover:bg-slate-900 md:hover:bg-transparent">
                             <i data-lucide="calendar" class="w-3.5 h-3.5 inline mr-1.5"></i>Éves Értékelés
                         </button>
@@ -201,6 +206,7 @@
                         <div id="wealth-growth-status" class="text-[11px] text-emerald-400 font-medium flex items-center">
                             <i data-lucide="trending-up" class="w-3.5 h-3.5 mr-1"></i> Teljes vagyon alapú
                         </div>
+                        <div id="wealth-inflation-note" class="text-[10px] text-amber-400"></div>
                     </div>
 
                     <div class="glass-card p-4 space-y-2">
@@ -329,6 +335,39 @@
                         </table>
                     </div>
                     <p id="mom-note" class="text-[10px] text-slate-500"></p>
+                </div>
+
+                <!-- INFLÁCIÓ-KÖVETÉS -->
+                <div id="inflation-card" class="glass-card p-4 sm:p-5 space-y-4">
+                    <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+                        <h3 class="text-sm font-bold text-white flex items-center">
+                            <i data-lucide="flame" class="w-5 h-5 mr-2 text-amber-400"></i> Infláció & a vagyon elértéktelenedése
+                        </h3>
+                        <div class="flex items-center space-x-2 text-xs text-slate-300">
+                            <label for="infl-rate">Éves infláció:</label>
+                            <input type="number" step="0.1" id="infl-rate" onchange="setInflationRate(this.value)" class="w-20 bg-[#0f172a] border border-slate-700 rounded p-1 text-white"> %
+                            <button onclick="resetInflationRate()" class="text-indigo-400 hover:text-indigo-300" title="KSH, 2026. október: 2,0%">KSH-érték (2,0%)</button>
+                        </div>
+                    </div>
+                    <div id="infl-kpis" class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs"></div>
+                    <div class="h-56"><canvas id="inflationChart"></canvas></div>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <div class="overflow-x-auto custom-scrollbar">
+                            <div class="text-xs font-semibold text-slate-300 mb-1">Eszközcsoportok és várható éves hozamuk (te állítod be)</div>
+                            <table class="w-full text-left text-xs min-w-[420px]">
+                                <thead class="text-slate-400 border-b border-slate-800"><tr><th class="p-2">Csoport</th><th class="p-2">Érték</th><th class="p-2">Éves hozam</th><th class="p-2">Reálhozam</th><th class="p-2">Éves reálváltozás</th></tr></thead>
+                                <tbody id="infl-bucket-body" class="divide-y divide-slate-800 text-slate-300"></tbody>
+                            </table>
+                        </div>
+                        <div class="overflow-x-auto custom-scrollbar">
+                            <div class="text-xs font-semibold text-slate-300 mb-1">Vagyonod értéke a jövőben (mai árakon)</div>
+                            <table class="w-full text-left text-xs min-w-[420px]">
+                                <thead class="text-slate-400 border-b border-slate-800"><tr><th class="p-2">Időtáv</th><th class="p-2">Névleges</th><th class="p-2">Reálérték</th><th class="p-2">Változás a maihoz</th><th class="p-2">Párna alatt</th></tr></thead>
+                                <tbody id="infl-horizon-body" class="divide-y divide-slate-800 text-slate-300"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <p id="infl-note" class="text-[10px] text-slate-500"></p>
                 </div>
 
                 <!-- MONTHLY SAVINGS GOAL & CASHFLOW FORECAST -->
@@ -499,6 +538,84 @@
             </div>
 
             <!-- SECTION 3: ANNUAL EVALUATION -->
+            <!-- BANKI IMPORT OLDAL -->
+            <div id="page-import" class="hidden space-y-6">
+                <div class="glass-card p-4 sm:p-5 space-y-4">
+                    <div>
+                        <h3 class="text-sm font-bold text-white flex items-center">
+                            <i data-lucide="file-up" class="w-5 h-5 mr-2 text-emerald-400"></i> Banki kivonat importálása
+                        </h3>
+                        <p class="text-[11px] text-slate-400 mt-1">Tölts fel PDF (vagy CSV) bankszámlakivonatot. A fájl nem hagyja el a böngésződet, a feldolgozás a gépeden történik. A tételeket itt nézed át és kategorizálod; csak jóváhagyás után kerülnek a Tranzakciókhoz, onnantól pedig az Áttekintés, a Költségvetés és a vagyon is velük számol.</p>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs items-end">
+                        <div><label class="block font-semibold text-slate-400 mb-1">Melyik számlához tartozik a kivonat?</label><select id="imp-account" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-white"></select></div>
+                        <div><label class="block font-semibold text-slate-400 mb-1">Tranzakció dátuma</label>
+                            <select id="imp-datesrc" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-white"><option value="booking">Könyvelés napja</option><option value="value">Értéknap</option></select></div>
+                        <div><label class="block font-semibold text-slate-400 mb-1">Rövid dátumformátum</label>
+                            <select id="imp-datefmt" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-white"><option value="auto">Automatikus felismerés</option><option value="ymd">ÉÉ.HH.NN</option><option value="dmy">NN.HH.ÉÉ</option><option value="mdy">HH.NN.ÉÉ</option></select></div>
+                        <div>
+                            <input type="file" id="imp-file" accept=".pdf,.csv,.txt" multiple class="hidden" onchange="handleImportFiles(event)">
+                            <button onclick="document.getElementById('imp-file').click()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-lg flex items-center justify-center font-semibold">
+                                <i data-lucide="upload" class="w-3.5 h-3.5 mr-1.5"></i> Kivonat feltöltése (PDF / CSV)
+                            </button>
+                        </div>
+                    </div>
+                    <label class="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer">
+                        <input type="checkbox" id="imp-userules" checked class="accent-indigo-500">
+                        <span>A korábbi kategorizálásaimat javaslatként előtöltöm (te hagyod jóvá)</span>
+                    </label>
+                    <div id="imp-busy" class="hidden text-xs text-amber-300"></div>
+                    <div id="imp-summary" class="space-y-2"></div>
+                </div>
+
+                <div class="glass-card p-4 sm:p-5 space-y-3" id="imp-review">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div>
+                            <h3 class="text-sm font-bold text-white flex items-center"><i data-lucide="list-checks" class="w-5 h-5 mr-2 text-indigo-400"></i> Jóváhagyásra váró tételek</h3>
+                            <div id="imp-counts" class="text-[11px] text-slate-400 mt-0.5"></div>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2 text-xs">
+                            <button onclick="impDiscardSelected()" class="px-3 py-1.5 text-slate-300 hover:text-rose-400 border border-slate-700 rounded-lg">Kijelöltek elvetése</button>
+                            <button onclick="impClearQueue()" class="px-3 py-1.5 text-slate-400 hover:text-rose-400">Várólista törlése</button>
+                            <button onclick="impApprove()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-semibold">Kijelöltek jóváhagyása (<span id="imp-approve-count">0</span>)</button>
+                        </div>
+                    </div>
+                    <label class="flex items-center space-x-2 text-[11px] text-slate-400 cursor-pointer">
+                        <input type="checkbox" id="imp-learn" checked class="accent-indigo-500">
+                        <span>Jóváhagyáskor jegyezze meg a döntéseimet (a következő importnál javaslatként jelennek meg)</span>
+                    </label>
+                    <div class="grid grid-cols-1 sm:grid-cols-6 gap-2 text-xs">
+                        <input type="text" id="imp-f-search" oninput="renderImport()" placeholder="Keresés a tételek között…" class="sm:col-span-2 w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-white">
+                        <select id="imp-f-status" onchange="renderImport()" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-white">
+                            <option value="all">Minden tétel</option><option value="uncat">Kategorizálatlan</option><option value="cat">Kategorizált</option>
+                            <option value="dup">Duplikáció-gyanús</option><option value="hide-dup">Duplikációk nélkül</option>
+                        </select>
+                        <select id="imp-bulk-type" onchange="impBulkTypeChanged()" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-white">
+                            <option value="expense">Kiadás</option><option value="income">Bevétel</option><option value="transfer">Áthelyezés</option>
+                        </select>
+                        <select id="imp-bulk-cat" class="w-full bg-[#0f172a] border border-slate-700 rounded-lg p-2 text-white"></select>
+                        <button onclick="impBulkApply()" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg">Beállítás a kijelöltekre</button>
+                    </div>
+                    <div class="flex items-center space-x-3 text-[11px]">
+                        <button onclick="impSelectAll(true)" class="text-indigo-400 hover:text-indigo-300">Összes látható kijelölése</button>
+                        <button onclick="impSelectAll(false)" class="text-slate-400 hover:text-white">Kijelölés törlése</button>
+                    </div>
+                    <div id="imp-banner" class="space-y-2"></div>
+                    <div class="overflow-x-auto custom-scrollbar">
+                        <table class="w-full text-left text-xs min-w-[900px]">
+                            <thead class="text-slate-400 border-b border-slate-800">
+                                <tr>
+                                    <th class="p-2 w-8"></th><th class="p-2">Dátum</th><th class="p-2">Leírás (szerkeszthető)</th>
+                                    <th class="p-2">Összeg</th><th class="p-2">Típus</th><th class="p-2">Kategória / másik számla</th><th class="p-2">Állapot</th>
+                                </tr>
+                            </thead>
+                            <tbody id="imp-table-body" class="divide-y divide-slate-800 text-slate-300"></tbody>
+                        </table>
+                    </div>
+                    <p class="text-[10px] text-slate-500">Tipp: a leírás fölé víve az egeret a kivonat eredeti, teljes szövege látszik. Áthelyezésnél (pl. saját számlák, perselyek, ATM) a „kategória” helyén a másik számlát választod ki.</p>
+                </div>
+            </div>
+
             <div id="page-annual" class="hidden space-y-6">
                 <div class="glass-card p-4 sm:p-6 space-y-6">
                     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
@@ -712,12 +829,11 @@
                         <div class="pt-4 border-t border-slate-800 space-y-3">
                             <div>
                                 <h4 class="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-1 flex items-center">
-                                    <i data-lucide="upload-cloud" class="w-3.5 h-3.5 mr-1.5"></i> OTP & Banki CSV / XLSX Importálás
+                                    <i data-lucide="upload-cloud" class="w-3.5 h-3.5 mr-1.5"></i> Banki kivonat importálás (PDF / CSV)
                                 </h4>
-                                <p class="text-[11px] text-slate-400 mb-2">Töltsd be az OTP netbankból vagy Wise/Revolutból letöltött tranzakciós fájlt.</p>
-                                <input type="file" id="bank-csv-file" accept=".csv, .xlsx" class="hidden" onchange="importBankStatement(event)">
-                                <button onclick="document.getElementById('bank-csv-file').click()" class="bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/40 text-xs px-3 py-2 rounded-lg transition-colors flex items-center">
-                                    <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5 mr-1.5"></i> Banki Kivonat Beolvasása (OTP / Wise / Revolut)
+                                <p class="text-[11px] text-slate-400 mb-2">Töltsd fel a netbankból letöltött PDF kivonatot vagy CSV fájlt; a tételeket a Banki import fülön te hagyod jóvá és kategorizálod.</p>
+                                <button onclick="switchTab('import')" class="bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/40 text-xs px-3 py-2 rounded-lg transition-colors flex items-center">
+                                    <i data-lucide="file-up" class="w-3.5 h-3.5 mr-1.5"></i> Megnyitás: Banki import (PDF / CSV)
                                 </button>
                             </div>
                         </div>
@@ -1288,6 +1404,13 @@
             if (!state.monthlySavedData) state.monthlySavedData = {};
             if (!state.annualGoals) state.annualGoals = {};
             if (!state.emergencySettings) state.emergencySettings = { monthlyExpense: 300000, targetMonths: 6 };
+            if (!Array.isArray(state.importQueue)) state.importQueue = [];
+            if (!Array.isArray(state.importMeta)) state.importMeta = [];
+            if (!state.importRules || typeof state.importRules !== 'object') state.importRules = {};
+            if (!state.importMap || typeof state.importMap !== 'object') state.importMap = {};
+            if (!state.inflation || typeof state.inflation.annual !== 'number') state.inflation = { annual: 2.0, yields: {} };
+            if (!state.inflation.yields || typeof state.inflation.yields !== 'object') state.inflation.yields = {};
+            ['liquid', 'emergency', 'locked', 'portfolio'].forEach(k => { if (typeof state.inflation.yields[k] !== 'number') state.inflation.yields[k] = 0; });
             if (!state.accountsList || !state.accountsList.length) {
                 state.accountsList = [{ name: 'REVOLUT', type: 'liquid', initialBalance: 0 }];
             }
@@ -1769,7 +1892,7 @@
         }
 
         function switchTab(tab) {
-            ['dashboard', 'transactions', 'annual', 'investments', 'budget', 'profile'].forEach(t => {
+            ['dashboard', 'transactions', 'import', 'annual', 'investments', 'budget', 'profile'].forEach(t => {
                 const pageEl = document.getElementById(`page-${t}`);
                 const tabEl = document.getElementById(`tab-${t}`);
                 if (pageEl) pageEl.classList.add('hidden');
@@ -1785,6 +1908,7 @@
             }
 
             if (tab === 'profile') renderProfileAccountsList();
+            if (tab === 'import') renderImport();
             if (tab === 'annual') renderAnnualPage();
             if (tab === 'investments') {
                 renderInvestments();
@@ -1816,16 +1940,11 @@
             renderAssetAllocationChart();
             renderWealthTrendChart();
             renderInvestmentsTrendChart();
+            renderInflation();
+            renderImport();
+            renderImportBadge();
             lucide.createIcons();
             saveData();
-        }
-
-        function importBankStatement(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            event.target.value = '';
-            showToast(`A banki fájl importálása még nincs kész, ezért a(z) "${esc(file.name)}" fájlból nem került rögzítésre tranzakció.`, "info");
         }
 
         function renderSinkingFunds() {
@@ -2096,6 +2215,25 @@
                 });
             }
 
+            try {
+                const ip = inflProjection();
+                if (ip.W > 0 && ip.i > 0) {
+                    let exposed = 0, yearlyLoss = 0;
+                    INFL_BUCKETS.forEach(k => {
+                        const y = (state.inflation.yields[k.key] || 0) / 100;
+                        const real = (1 + y) / (1 + ip.i) - 1;
+                        if (real < 0) { exposed += ip.b[k.key]; yearlyLoss += -ip.b[k.key] * real; }
+                    });
+                    if (exposed / ip.W > 0.3 && yearlyLoss > 0) {
+                        insights.push({
+                            type: 'warning',
+                            icon: 'flame',
+                            text: `Infláció: a vagyonod <strong>${((exposed / ip.W) * 100).toFixed(0)}%</strong>-a (${Math.round(exposed).toLocaleString()} Ft) az inflációt (${state.inflation.annual}%) nem követő hozamon áll, ezért évente kb. <strong>${Math.round(yearlyLoss).toLocaleString()} Ft</strong> vásárlóerőt veszít.`
+                        });
+                    }
+                }
+            } catch (e) { /* infláció-jelzés nem kritikus */ }
+
             if (insights.length === 0) {
                 insights.push({
                     type: 'info',
@@ -2133,6 +2271,8 @@
                 state.monthlyGoals = {};
                 state.monthlySavedData = {};
                 state.annualGoals = {};
+                state.importQueue = [];
+                state.importMeta = [];
                 renderApp();
                 renderProfileAccountsList();
                 showToast("A rendszer sikeresen alaphelyzetbe lett állítva.", "info");
@@ -3017,7 +3157,7 @@
                 tr.innerHTML = `
                     <td class="p-2.5 text-slate-400 whitespace-nowrap">${t.date}</td>
                     <td class="p-2.5 whitespace-nowrap"><span class="px-2 py-0.5 rounded border text-[10px] ${badgeClass}">${typeText}</span></td>
-                    <td class="p-2.5 font-medium text-white whitespace-nowrap">${categoryHtml}</td>
+                    <td class="p-2.5 font-medium text-white whitespace-nowrap">${categoryHtml}${t.importKey ? ' <span title="Banki kivonatból importálva" class="text-[10px]">🏦</span>' : ''}</td>
                     <td class="p-2.5 text-slate-400 text-[11px] whitespace-nowrap">${esc(srcName)}</td>
                     <td class="p-2.5 font-bold whitespace-nowrap ${t.type === 'income' ? 'text-emerald-500' : (t.type === 'expense' ? 'text-rose-500' : 'text-sky-500')}">
                         ${amountPrefix}${t.amount.toLocaleString()} ${t.currency}
@@ -3999,7 +4139,1091 @@
             }
             closeEmergencyModal();
         }
+        // =====================================================================
+        // BANKI KIVONAT FELDOLGOZÓ (PDF / CSV) – általános, nem bankspecifikus
+        // =====================================================================
+        // Bemenet PDF esetén: pages = [{ width, height, items: [{ str, x, y, w, h }] }]
+        // A feldolgozás három lépés: sorok építése -> tételek (rekordok) felismerése -> összeg/dátum/leírás kinyerése.
+        // A nyitó + tételek = záró egyenleg egyeztetés jelzi, ha valamit rosszul olvasott.
+
+        const BP_AMT_RE = /^[+\-−–]?\s?\d{1,3}(?:[. \u00a0]\d{3})*(?:,\d{1,2})?\s?[+\-−–]?(?:\s?(?:Ft|HUF|EUR|USD|GBP))?$|^[+\-−–]?\d{1,9}(?:[.,]\d{1,2})?[+\-−–]?(?:\s?(?:Ft|HUF|EUR|USD|GBP))?$|^\(\s?\d[\d. ,]*\)$/;
+        const BP_DATE_RES = [
+            { kind: 'ymd4', re: /^(\d{4})[.\-\/]\s?(\d{1,2})[.\-\/]\s?(\d{1,2})\.?(?![\d])/ },
+            { kind: 'dmy4', re: /^(\d{1,2})[.\-\/]\s?(\d{1,2})[.\-\/]\s?(\d{4})\.?(?![\d])/ },
+            { kind: 'short', re: /^(\d{2})[.\-\/](\d{2})[.\-\/](\d{2})\.?(?![\d.\/\-])/ }
+        ];
+        const BP_OPEN_RE = /(nyit[oó]|opening|el[oő]z[oő]|kezd[oő])\s+(egyenleg|balance|záróegyenleg)/i;
+        const BP_CLOSE_RE = /(z[aá]r[oó]|closing|v[eé]gs[oő])\s+(egyenleg|balance)/i;
+        const BP_STOP_RE = /(J[ÓO]V[ÁA][ÍI]R[ÁA]SOK\s+[ÖO]SSZESEN|TERHEL[ÉE]SEK\s+[ÖO]SSZESEN|TOTAL\s+(CREDITS|DEBITS)|TOV[ÁA]BBI\s+SZ[ÁA]MLAINFORM)/i;
+
+        function bpParseAmount(raw) {
+            let s = String(raw).trim().replace(/\u00a0/g, ' ').replace(/[−–]/g, '-');
+            let neg = false;
+            if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1, -1).trim(); }
+            if (s[0] === '-') { neg = true; s = s.slice(1).trim(); } else if (s[0] === '+') { s = s.slice(1).trim(); }
+            if (s.endsWith('-')) { neg = true; s = s.slice(0, -1).trim(); }
+            s = s.replace(/\s?(Ft|HUF|EUR|USD|GBP)$/i, '').replace(/\s/g, '');
+            if (!/^\d[\d.,]*$/.test(s)) return null;
+            const lastDot = s.lastIndexOf('.'), lastCom = s.lastIndexOf(',');
+            let val;
+            if (lastDot > -1 && lastCom > -1) {
+                const dec = lastDot > lastCom ? '.' : ',';
+                const thou = dec === '.' ? ',' : '.';
+                val = parseFloat(s.split(thou).join('').replace(dec, '.'));
+            } else if (lastDot > -1 || lastCom > -1) {
+                const sep = lastDot > -1 ? '.' : ',';
+                const parts = s.split(sep);
+                if (parts.length > 2) val = parseFloat(parts.join(''));
+                else if (parts[1].length === 3) val = parseFloat(parts.join(''));   // 20.000 -> ezres tagolás
+                else val = parseFloat(parts[0] + '.' + parts[1]);
+            } else {
+                val = parseFloat(s);
+            }
+            if (!isFinite(val)) return null;
+            return neg ? -val : val;
+        }
+
+        function bpIsAmountToken(str) {
+            const t = String(str).trim();
+            if (!t || !BP_AMT_RE.test(t)) return false;
+            return bpParseAmount(t) !== null;
+        }
+
+        function bpBuildLines(pages) {
+            const lines = [];
+            pages.forEach((pg, pi) => {
+                const items = pg.items.filter(it => it.str && it.str.trim() !== '')
+                    .slice().sort((a, b) => (b.y - a.y) || (a.x - b.x));
+                let cur = null;
+                items.forEach(it => {
+                    const tol = Math.max(2, (it.h || 8) * 0.4);
+                    if (cur && Math.abs(it.y - cur.y) <= tol) cur.items.push(it);
+                    else { cur = { page: pi, y: it.y, items: [it] }; lines.push(cur); }
+                });
+            });
+            lines.forEach(l => {
+                l.items.sort((a, b) => a.x - b.x);
+                l.text = bpJoinItems(l.items);
+                l.x0 = l.items[0].x;
+            });
+            return lines;
+        }
+
+        function bpJoinItems(items) {
+            let out = '', prevEnd = null;
+            items.forEach(it => {
+                const s = it.str;
+                if (out && prevEnd !== null && it.x - prevEnd > 1.2 && !/\s$/.test(out) && !/^\s/.test(s)) out += ' ';
+                out += s;
+                prevEnd = it.x + it.w;
+            });
+            return out.replace(/\s+/g, ' ').trim();
+        }
+
+        function bpMatchDate(text) {
+            const t = text.trim();
+            for (const d of BP_DATE_RES) {
+                const m = t.match(d.re);
+                if (m) return { kind: d.kind, a: +m[1], b: +m[2], c: +m[3], len: m[0].length };
+            }
+            return null;
+        }
+
+        function bpDecideShortFmt(triples) {
+            if (!triples.length) return 'ymd';
+            const ymdOk = triples.every(t => t.b >= 1 && t.b <= 12 && t.c >= 1 && t.c <= 31);
+            const dmyOk = triples.every(t => t.b >= 1 && t.b <= 12 && t.a >= 1 && t.a <= 31);
+            if (ymdOk && !dmyOk) return 'ymd';
+            if (dmyOk && !ymdOk) return 'dmy';
+            if (!ymdOk && !dmyOk) return 'ymd';
+            const ua = new Set(triples.map(t => t.a)).size, uc = new Set(triples.map(t => t.c)).size;
+            if (ua < uc) return 'ymd';
+            if (uc < ua) return 'dmy';
+            return 'ymd';
+        }
+
+        function bpDecideDmy4Fmt(list) {
+            if (list.some(t => t.a > 12)) return 'dmy';
+            if (list.some(t => t.b > 12)) return 'mdy';
+            return 'dmy';
+        }
+
+        function bpToIso(d, shortFmt, dmy4Fmt) {
+            let y, m, day;
+            if (d.kind === 'ymd4') { y = d.a; m = d.b; day = d.c; }
+            else if (d.kind === 'dmy4') {
+                if (dmy4Fmt === 'mdy') { m = d.a; day = d.b; } else { day = d.a; m = d.b; }
+                y = d.c;
+            } else {
+                const yy = (v) => (v < 70 ? 2000 + v : 1900 + v);
+                if (shortFmt === 'dmy') { day = d.a; m = d.b; y = yy(d.c); }
+                else if (shortFmt === 'mdy') { m = d.a; day = d.b; y = yy(d.c); }
+                else { y = yy(d.a); m = d.b; day = d.c; }
+            }
+            if (m < 1 || m > 12 || day < 1 || day > 31 || y < 1990 || y > 2100) return null;
+            return `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        }
+
+        // Fejlécoszlopok (Összeg / Terhelés / Jóváírás / Egyenleg) felismerése az x pozíciókból
+        function bpDetectColumns(lines) {
+            const KW = {
+                amount: /^(összeg|osszeg|amount|tétel|forgalom)$/i,
+                debit: /^(terhelés|terheles|debit|kiadás|withdrawal|money out)$/i,
+                credit: /^(jóváírás|jovairas|credit|bevétel|deposit|money in)$/i,
+                balance: /^(egyenleg|balance|záróegyenleg)$/i
+            };
+            const CTX = /(dátum|datum|date|megnevezés|megnevezes|leírás|description|közlemény|könyvelés|konyveles|tranzakció|partner|értéknap)/i;
+            const perPage = {};
+            lines.forEach(l => {
+                const hits = [];
+                l.items.forEach(it => {
+                    const s = it.str.trim();
+                    Object.keys(KW).forEach(k => { if (KW[k].test(s)) hits.push({ k, xr: it.x + it.w, xc: it.x + it.w / 2 }); });
+                });
+                if (!hits.length) return;
+                const hasCtx = l.items.some(it => CTX.test(it.str)) || l.text.split(' ').length > 3;
+                if (!hasCtx) return;
+                if (!perPage[l.page]) perPage[l.page] = {};
+                hits.forEach(h => { if (!perPage[l.page][h.k]) perPage[l.page][h.k] = h; });
+            });
+            const pages = Object.keys(perPage);
+            const global = pages.length ? perPage[pages[0]] : null;
+            return { perPage, global };
+        }
+
+        function bpComposeText(items, skip) {
+            return bpJoinItems(items.filter(it => !skip.has(it)));
+        }
+
+        function bpCleanDesc(raw) {
+            let t = raw.replace(/\s+/g, ' ').trim();
+            t = t.replace(/\(\d{1,2}\.\)\s*/g, '');
+            t = t.replace(/(\d),(\d)/g, '$1§$2');
+            const segs = t.split(',').map(x => x.trim()).filter(Boolean);
+            const keep = [];
+            segs.forEach(sg => {
+                if (!/[A-Za-zÁÉÍÓÖŐÚÜŰáéíóöőúüű]/.test(sg)) return;
+                if (/^[A-Z]\.\d{3,5}$/.test(sg)) return;
+                if (/^(NOTPROVIDED|N|NULL)$/i.test(sg)) return;
+                if (/^Tranzakci[óo]:\s*\d/i.test(sg) && sg.replace(/^Tranzakci[óo]:\s*[\d.\-\/]+/i, '').trim() === '') return;
+                if (/(MERCHDEVID|SHOPID|CREDTRANID)/i.test(sg)) return;
+                if (/^[A-Z0-9_\-]{8,}$/.test(sg) && /\d/.test(sg)) return;
+                if (/^[A-Z]{4}HU[A-Z0-9]{2}(?:[A-Z0-9]{3})?$/.test(sg)) return;
+                let x = sg.replace(/^Tranzakci[óo]:\s*[\d.\-\/]+\s*/i, '').trim();
+                x = x.replace(/(\d[\d§]*\s?[A-Z]{3})\s0$/, '$1');
+                if (x) keep.push(x.replace(/§/g, ','));
+            });
+            const seen = new Set();
+            return keep.filter(k => { const n = k.toLowerCase(); if (seen.has(n)) return false; seen.add(n); return true; }).join(', ');
+        }
+
+        function bpHash(str) {
+            let h = 5381;
+            for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+            return (h >>> 0).toString(36);
+        }
+
+        function bpNormKey(desc) {
+            return String(desc).toLowerCase().replace(/[0-9]+/g, '').replace(/[^a-záéíóöőúüű ]/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 60);
+        }
+
+        // 1. lépés: a sorokból tételrekordok (több soros tételek összefűzve)
+        function bpExtractRecords(pages) {
+            const lines = bpBuildLines(pages);
+            const cols = bpDetectColumns(lines);
+
+            // dátummal kezdődő sorok és a dátumoszlop x pozíciója
+            const cand = [];
+            lines.forEach(l => {
+                const d = bpMatchDate(l.text);
+                if (d) cand.push({ l, d });
+            });
+            let accepted = cand;
+            if (cand.length) {
+                const bucket = {};
+                cand.forEach(c => { const k = Math.round(c.l.x0 / 3); bucket[k] = (bucket[k] || 0) + 1; });
+                const best = Object.keys(bucket).sort((a, b) => bucket[b] - bucket[a])[0];
+                if (bucket[best] >= cand.length * 0.5) {
+                    accepted = cand.filter(c => Math.abs(c.l.x0 - best * 3) <= 6);
+                }
+            }
+            const acceptedSet = new Map(accepted.map(a => [a.l, a.d]));
+
+            const records = [];
+            const info = { opening: null, closing: null };
+            let cur = null, ended = false, lastPage = -1;
+            const closeCur = () => { if (cur) { cur.closed = true; } };
+
+            lines.forEach(l => {
+                if (ended) return;
+                if (l.page !== lastPage) { closeCur(); cur = null; lastPage = l.page; }
+                const dateHit = acceptedSet.get(l);
+                const isOpen = BP_OPEN_RE.test(l.text), isClose = BP_CLOSE_RE.test(l.text);
+
+                if (BP_STOP_RE.test(l.text)) { closeCur(); cur = null; return; }
+
+                if (isOpen || isClose) {
+                    const nums = l.items.filter(it => bpIsAmountToken(it.str));
+                    let val = null;
+                    if (nums.length) val = bpParseAmount(nums[nums.length - 1].str);
+                    else {
+                        const m = l.text.match(/(-?\d[\d. \u00a0]*(?:,\d{1,2})?)\s*(?:Ft|HUF)?\s*$/);
+                        if (m) val = bpParseAmount(m[1]);
+                    }
+                    if (val !== null) {
+                        if (isOpen && info.opening === null) info.opening = val;
+                        if (isClose) info.closing = val;
+                    }
+                    if (dateHit) { closeCur(); cur = null; if (isClose) ended = true; return; }
+                    return;
+                }
+
+                if (dateHit) {
+                    closeCur();
+                    const rest = l.text.slice(dateHit.len).trim();
+                    const d2 = bpMatchDate(rest);
+                    cur = { page: l.page, lines: [l], d1: dateHit, d2: d2 && d2.kind === dateHit.kind ? d2 : null, closed: false };
+                    records.push(cur);
+                } else if (cur && !cur.closed) {
+                    cur.lines.push(l);
+                }
+            });
+
+            const pageW = {};
+            pages.forEach((p, i) => { pageW[i] = p.width; });
+            return { records, info, cols, pageW, lines };
+        }
+
+        function bpStatementMeta(pages) {
+            const all = pages.map(p => bpJoinItems(p.items.slice().sort((a, b) => (b.y - a.y) || (a.x - b.x)))).join(' \n ');
+            const flat = pages.map(p => p.items.map(i => i.str).join(' ')).join(' ');
+            const meta = { currency: 'HUF', accountNo: '', iban: '', period: '' };
+            let m = flat.match(/(?:DEVIZANEM|Pénznem|Currency)[:\s]+([A-Z]{3})\b/i);
+            if (m) meta.currency = m[1].toUpperCase();
+            m = flat.match(/\bIBAN[:\s]+([A-Z]{2}\d{2}(?:\s?[A-Z0-9]{4}){3,7}(?:\s?\d{1,4})?)(?![A-Z0-9])/);
+            if (m) meta.iban = m[1].replace(/\s+/g, ' ').trim();
+            m = flat.match(/(?:SZ[ÁA]MLASZ[ÁA]M|Account number|Számlaszám)[:\s]+(\d{8}-\d{8}(?:-\d{8})?)/i);
+            if (m) meta.accountNo = m[1];
+            m = flat.match(/(?:IDŐSZAK|Period)[:\s]+([\d.\-\/ ]{8,30})/i);
+            if (m) meta.period = m[1].trim();
+            return meta;
+        }
+
+        // 2. lépés: összeg kiválasztása stratégia szerint
+        function bpPickAmount(rec, ctx, strategy) {
+            const W = ctx.pageW[rec.page] || 600;
+            const items = rec.lines.flatMap(l => l.items);
+            const cands = items.filter(it => bpIsAmountToken(it.str) && (it.x + it.w) >= W * 0.5);
+            const cols = ctx.cols.perPage[rec.page] || ctx.cols.global;
+            let chosen = null, forceSign = null;
+
+            if (strategy === 'header' && cols) {
+                const near = (it, k) => cols[k] ? Math.abs((it.x + it.w) - cols[k].xr) : Infinity;
+                const scored = cands.map(it => {
+                    const o = { it };
+                    ['amount', 'debit', 'credit', 'balance'].forEach(k => { o[k] = near(it, k); });
+                    const best = ['amount', 'debit', 'credit', 'balance'].sort((a, b) => o[a] - o[b])[0];
+                    o.best = best; o.dist = o[best];
+                    return o;
+                }).filter(o => o.dist <= 45 && o.best !== 'balance');
+                if (scored.length) {
+                    scored.sort((a, b) => (b.it.x + b.it.w) - (a.it.x + a.it.w));
+                    chosen = scored[0].it;
+                    if (scored[0].best === 'debit') forceSign = -1;
+                    if (scored[0].best === 'credit') forceSign = 1;
+                }
+            } else if (strategy === 'second') {
+                const sorted = cands.slice().sort((a, b) => (b.x + b.w) - (a.x + a.w));
+                if (sorted.length >= 2 && Math.abs((sorted[0].x + sorted[0].w) - (sorted[1].x + sorted[1].w)) > 6) chosen = sorted[1];
+                else chosen = sorted[0] || null;
+            } else {
+                chosen = cands.slice().sort((a, b) => (b.x + b.w) - (a.x + a.w))[0] || null;
+            }
+
+            let value = null;
+            if (chosen) {
+                value = bpParseAmount(chosen.str);
+                if (value !== null && forceSign) value = Math.abs(value) * forceSign;
+            }
+            return { value, chosen, cands };
+        }
+
+        function bpBuildRows(extracted, strategy, opts) {
+            opts = opts || {};
+            const { records } = extracted;
+            const shorts = [], dmy4 = [];
+            records.forEach(r => {
+                [r.d1, r.d2].forEach(d => {
+                    if (!d) return;
+                    if (d.kind === 'short') shorts.push(d); else if (d.kind === 'dmy4') dmy4.push(d);
+                });
+            });
+            const shortFmt = (opts.shortFmt && opts.shortFmt !== 'auto') ? opts.shortFmt : bpDecideShortFmt(shorts);
+            const dmy4Fmt = bpDecideDmy4Fmt(dmy4);
+
+            const rowsRaw = [];
+            records.forEach(rec => {
+                const pick = bpPickAmount(rec, extracted, strategy);
+                const skip = new Set(pick.cands);
+                const lineTexts = rec.lines.map((l, i) => {
+                    let t = bpComposeText(l.items, skip);
+                    if (i === 0) {
+                        const d = bpMatchDate(t);
+                        if (d) { t = t.slice(d.len).trim(); const d2 = bpMatchDate(t); if (d2) t = t.slice(d2.len).trim(); }
+                    }
+                    return t;
+                }).filter(Boolean);
+                let value = pick.value;
+                let rawText = lineTexts.join(' ').replace(/\s+/g, ' ').trim();
+                if (value === null) {
+                    // tartalék: az összeg a sor végén, egy szövegrészben
+                    const m = rawText.match(/(-?\d{1,3}(?:[. \u00a0]\d{3})*(?:,\d{1,2})?)\s*(?:Ft|HUF)?\s*$/);
+                    if (m) { value = bpParseAmount(m[1]); rawText = rawText.slice(0, m.index).trim(); }
+                }
+                if (value === null || value === 0) return;
+                const iso1 = bpToIso(rec.d1, shortFmt, dmy4Fmt);
+                const iso2 = rec.d2 ? bpToIso(rec.d2, shortFmt, dmy4Fmt) : null;
+                if (!iso1) return;
+                rowsRaw.push({ date: iso1, date2: iso2, amount: value, raw: rawText });
+            });
+
+            // boilerplate szegmensek (minden második tételben ugyanaz, pl. a saját név) elrejtése a rövid leírásból
+            const cleaned = rowsRaw.map(r => bpCleanDesc(r.raw));
+            const segCount = {};
+            cleaned.forEach(c => { new Set(c.split(', ').slice(1)).forEach(s => { segCount[s] = (segCount[s] || 0) + 1; }); });
+            const noisy = new Set(Object.keys(segCount).filter(s => rowsRaw.length >= 8 && segCount[s] > rowsRaw.length * 0.35));
+
+            const occ = {};
+            const rows = rowsRaw.map((r, i) => {
+                const segs = cleaned[i].split(', ');
+                const desc = [segs[0]].concat(segs.slice(1).filter(s => !noisy.has(s))).filter(Boolean).join(', ') || r.raw.slice(0, 80);
+                const base = bpHash([r.date, r.date2 || '', r.amount, r.raw.toLowerCase().replace(/\s+/g, '')].join('|'));
+                occ[base] = (occ[base] || 0) + 1;
+                const upper = r.raw.toUpperCase();
+                const hint = /(PERSELY|SAJÁT SZÁMLA|ÁTVEZETÉS|ATM|KÉSZPÉNZFELV|FELKEREK)/.test(upper) ? 'transfer' : '';
+                return {
+                    date: r.date, date2: r.date2, amount: r.amount, raw: r.raw,
+                    desc: desc.slice(0, 120), hint,
+                    key: `${base}#${occ[base]}`, normKey: bpNormKey(desc)
+                };
+            });
+            return { rows, shortFmt };
+        }
+
+        // Teljes feldolgozás: több stratégiát kipróbál, és az egyenleg-egyeztetés alapján választ
+        function bpParsePages(pages, opts) {
+            const extracted = bpExtractRecords(pages);
+            const meta = bpStatementMeta(pages);
+            const strategies = [];
+            if (extracted.cols.global) strategies.push('header');
+            strategies.push('rightmost', 'second');
+            const { opening, closing } = extracted.info;
+            let best = null;
+            for (const st of strategies) {
+                const built = bpBuildRows(extracted, st, opts);
+                const sum = built.rows.reduce((s, r) => s + r.amount, 0);
+                let diff = null, ok = false;
+                if (opening !== null && closing !== null) {
+                    diff = (opening + sum) - closing;
+                    ok = Math.abs(diff) < 0.5;
+                }
+                const cand = { strategy: st, rows: built.rows, shortFmt: built.shortFmt, sum, diff, ok };
+                if (!best || (ok && !best.ok) || (!ok && !best.ok && diff !== null && best.diff !== null && Math.abs(diff) < Math.abs(best.diff))) best = cand;
+                if (ok) break;
+            }
+            const warnings = [];
+            if (!best.rows.length) warnings.push('Nem találtam tranzakciós sorokat. Lehet, hogy beszkennelt (képként mentett) PDF-ről van szó, vagy a kivonat szerkezete ismeretlen.');
+            if (opening === null || closing === null) warnings.push('A kivonatban nem találtam nyitó/záró egyenleget, ezért nem tudom automatikusan ellenőrizni az összegeket.');
+            else if (!best.ok) warnings.push(`Az egyenleg nem egyezik: a nyitó egyenleg + a tételek (${Math.round(opening + best.sum).toLocaleString()}) eltér a záró egyenlegtől (${Math.round(closing).toLocaleString()}), különbség: ${Math.round(best.diff).toLocaleString()}. Ellenőrizd a tételeket!`);
+            return {
+                rows: best.rows, opening, closing, meta, strategy: best.strategy, shortFmt: best.shortFmt,
+                recon: { checked: opening !== null && closing !== null, ok: best.ok, diff: best.diff, sum: best.sum },
+                warnings
+            };
+        }
+
+        // ---------- CSV ----------
+        function bpParseCsv(text) {
+            text = text.replace(/^\uFEFF/, '');
+            const firstLines = text.split(/\r?\n/).filter(l => l.trim()).slice(0, 5);
+            const counts = { ';': 0, ',': 0, '\t': 0 };
+            firstLines.forEach(l => Object.keys(counts).forEach(d => { counts[d] += l.split(d).length - 1; }));
+            const delim = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
+            const splitLine = (line) => {
+                const out = []; let cur = '', q = false;
+                for (let i = 0; i < line.length; i++) {
+                    const ch = line[i];
+                    if (ch === '"') { if (q && line[i + 1] === '"') { cur += '"'; i++; } else q = !q; }
+                    else if (ch === delim && !q) { out.push(cur); cur = ''; }
+                    else cur += ch;
+                }
+                out.push(cur);
+                return out.map(s => s.trim());
+            };
+            const rowsAll = text.split(/\r?\n/).filter(l => l.trim()).map(splitLine);
+            if (rowsAll.length < 2) return { rows: [], warnings: ['A CSV fájl üres vagy ismeretlen szerkezetű.'] };
+            let hi = rowsAll.findIndex(r => r.some(c => /(dátum|datum|date|könyvelés)/i.test(c)) && r.some(c => /(összeg|osszeg|amount|tétel|terhelés|jóváírás|debit|credit|forgalom)/i.test(c)));
+            if (hi < 0) hi = 0;
+            const head = rowsAll[hi].map(h => h.toLowerCase());
+            const find = (re) => head.findIndex(h => re.test(h));
+            let cDate = find(/(könyvelés|konyveles|dátum|datum|date|értéknap)/);
+            const cAmt = find(/^(összeg|osszeg|amount|tétel|forgalom)/);
+            const cDeb = find(/(terhelés|terheles|debit|kiadás)/);
+            const cCre = find(/(jóváírás|jovairas|credit|bevétel)/);
+            const descCols = [];
+            head.forEach((h, i) => { if (/(megnevezés|megnevezes|leírás|leiras|description|közlemény|kozlemeny|partner|name|memo|reference|típus|tipus|type)/.test(h) && i !== cDate) descCols.push(i); });
+            if (cDate < 0) cDate = 0;
+            const dateObjs = [];
+            const body = rowsAll.slice(hi + 1);
+            body.forEach(r => { const d = bpMatchDate(r[cDate] || ''); if (d) dateObjs.push(d); });
+            const shortFmt = bpDecideShortFmt(dateObjs.filter(d => d.kind === 'short'));
+            const dmy4Fmt = bpDecideDmy4Fmt(dateObjs.filter(d => d.kind === 'dmy4'));
+            const occ = {};
+            const rows = [];
+            body.forEach(r => {
+                const d = bpMatchDate(r[cDate] || '');
+                if (!d) return;
+                const iso = bpToIso(d, shortFmt, dmy4Fmt);
+                if (!iso) return;
+                let amount = null;
+                if (cAmt >= 0) amount = bpParseAmount(r[cAmt] || '');
+                if (amount === null && (cDeb >= 0 || cCre >= 0)) {
+                    const deb = cDeb >= 0 ? bpParseAmount(r[cDeb] || '') : null;
+                    const cre = cCre >= 0 ? bpParseAmount(r[cCre] || '') : null;
+                    if (deb) amount = -Math.abs(deb); else if (cre) amount = Math.abs(cre);
+                }
+                if (amount === null || amount === 0) return;
+                const raw = (descCols.length ? descCols.map(i => r[i]).filter(Boolean).join(', ') : r.filter((c, i) => i !== cDate && i !== cAmt).join(', ')).trim();
+                const desc = bpCleanDesc(raw) || raw.slice(0, 80);
+                const base = bpHash([iso, amount, raw.toLowerCase().replace(/\s+/g, '')].join('|'));
+                occ[base] = (occ[base] || 0) + 1;
+                rows.push({ date: iso, date2: null, amount, raw, desc: desc.slice(0, 120), hint: '', key: `${base}#${occ[base]}`, normKey: bpNormKey(desc) });
+            });
+            const warnings = rows.length ? [] : ['Nem találtam a CSV-ben felismerhető dátum + összeg oszlopokat.'];
+            return { rows, opening: null, closing: null, meta: { currency: 'HUF', accountNo: '', iban: '', period: '' }, strategy: 'csv', shortFmt, recon: { checked: false, ok: false, diff: null, sum: rows.reduce((s, r) => s + r.amount, 0) }, warnings };
+        }
+
+        async function bpExtractPdfPages(pdfDoc) {
+            const pages = [];
+            for (let p = 1; p <= pdfDoc.numPages; p++) {
+                const page = await pdfDoc.getPage(p);
+                const vp = page.getViewport({ scale: 1 });
+                const tc = await page.getTextContent();
+                const items = [];
+                tc.items.forEach(it => {
+                    if (typeof it.str !== 'string' || !it.str.trim()) return;
+                    items.push({ str: it.str, x: it.transform[4], y: it.transform[5], w: it.width, h: Math.abs(it.height) || Math.abs(it.transform[3]) || 8 });
+                });
+                pages.push({ width: vp.width, height: vp.height, items });
+            }
+            return pages;
+        }
+
+
+        // =====================================================================
+        // BANKI IMPORT – feltöltés, várólista, jóváhagyás
+        // =====================================================================
+        let impSeq = 0;
+        let impSuggest = null;     // { label, type, category, ids }
+        let impLastResult = null;  // { count, latestDate, message }
+
+        function impNewId() { impSeq = (impSeq + 1) % 1000; return Date.now() * 1000 + impSeq; }
+
+        async function bpEnsurePdfJs() {
+            if (typeof pdfjsLib === 'undefined') {
+                throw new Error('A PDF olvasó könyvtár nem töltődött be. Az első használathoz internetkapcsolat kell, majd frissítsd az oldalt.');
+            }
+            if (pdfjsLib.__fhWorkerReady) return;
+            const url = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+            try {
+                const r = await fetch(url);
+                const blob = await r.blob();
+                pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([blob], { type: 'text/javascript' }));
+            } catch (e) {
+                pdfjsLib.GlobalWorkerOptions.workerSrc = url;
+            }
+            pdfjsLib.__fhWorkerReady = true;
+        }
+
+        function populateImportAccountSelect() {
+            const sel = document.getElementById('imp-account');
+            if (!sel) return;
+            const cur = sel.value;
+            sel.innerHTML = '';
+            state.accountsList.forEach(a => sel.appendChild(new Option(`${a.name} (${a.type === 'liquid' ? 'Likvid' : a.type === 'emergency' ? 'Vészhelyzeti' : 'Zárolt'})`, a.name)));
+            if (state.accountsList.some(a => a.name === cur)) sel.value = cur;
+            else {
+                const otp = state.accountsList.find(a => /otp/i.test(a.name)) || state.accountsList.find(a => a.type === 'liquid') || state.accountsList[0];
+                if (otp) sel.value = otp.name;
+            }
+        }
+
+        function setImportBusy(on, msg) {
+            const el = document.getElementById('imp-busy');
+            if (!el) return;
+            el.classList.toggle('hidden', !on);
+            el.innerText = msg || '';
+        }
+
+        async function handleImportFiles(event) {
+            const files = Array.from(event.target.files || []);
+            event.target.value = '';
+            if (!files.length) return;
+            const accName = document.getElementById('imp-account').value;
+            if (!accName) { showToast('Előbb válaszd ki, melyik számlához tartozik a kivonat!', 'error'); return; }
+            const opts = {
+                account: accName,
+                dateSrc: document.getElementById('imp-datesrc').value,
+                shortFmt: document.getElementById('imp-datefmt').value,
+                useRules: document.getElementById('imp-userules').checked
+            };
+            impLastResult = null;
+            let added = 0;
+            for (const f of files) {
+                setImportBusy(true, `Feldolgozás: ${f.name} …`);
+                try {
+                    added += await importOneFile(f, opts);
+                } catch (err) {
+                    showToast(`"${f.name}": ${err && err.message ? err.message : err}`, 'error');
+                }
+            }
+            setImportBusy(false);
+            renderImport();
+            renderImportBadge();
+            saveData();
+            if (added > 0) showToast(`${added} új tétel került a jóváhagyási várólistára.`, 'success');
+        }
+
+        async function importOneFile(file, opts) {
+            const ext = (file.name.split('.').pop() || '').toLowerCase();
+            let parsed;
+            if (ext === 'pdf') {
+                await bpEnsurePdfJs();
+                const buf = await file.arrayBuffer();
+                const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+                const pages = await bpExtractPdfPages(doc);
+                parsed = bpParsePages(pages, { shortFmt: opts.shortFmt });
+            } else if (ext === 'csv' || ext === 'txt') {
+                parsed = bpParseCsv(await file.text());
+            } else {
+                throw new Error('Csak PDF és CSV fájl támogatott (az XLSX-et mentsd el CSV-ként).');
+            }
+
+            const stmtId = parsed.meta.iban || parsed.meta.accountNo || '';
+            let accName = opts.account;
+            let mapped = false;
+            if (stmtId && state.importMap[stmtId] && state.accountsList.some(a => a.name === state.importMap[stmtId])) {
+                accName = state.importMap[stmtId];
+                mapped = true;
+            }
+            let currency = parsed.meta.currency || 'HUF';
+            const warnings = parsed.warnings.slice();
+            if (!FX_RATES[currency]) {
+                warnings.push(`A kivonat pénzneme (${currency}) nincs felvéve a devizák között, ezért HUF-ként rögzítem. Vedd fel az árfolyamot a Beállítások / Áttekintés oldalon, ha szükséges.`);
+                currency = 'HUF';
+            }
+
+            const metaId = impNewId();
+            const known = new Set(state.importQueue.map(r => r.key));
+            const importedKeys = new Set(state.transactions.filter(t => t.importKey).map(t => t.importKey));
+            let skipped = 0;
+            const newRows = [];
+            parsed.rows.forEach(r => {
+                if (known.has(r.key)) { skipped++; return; }
+                const date = (opts.dateSrc === 'value' && r.date2) ? r.date2 : r.date;
+                const row = {
+                    id: impNewId(), metaId, date, amount: r.amount, raw: r.raw, desc: r.desc, hint: r.hint,
+                    key: r.key, normKey: r.normKey, account: accName, currency,
+                    type: r.amount < 0 ? 'expense' : 'income', category: '',
+                    selected: true, status: 'ok', dupNote: '', suggested: false
+                };
+                if (importedKeys.has(r.key)) {
+                    row.status = 'dup-import'; row.selected = false; row.dupNote = 'Ez a tétel már importálva van a Tranzakciókban.';
+                } else {
+                    const dup = impFindManualDup(row);
+                    if (dup) {
+                        row.status = 'dup-manual'; row.selected = false;
+                        row.dupNote = `Hasonló tétel már szerepel: ${dup.date} • ${dup.category}${dup.subtag ? ' (' + dup.subtag + ')' : ''}`;
+                    }
+                }
+                if (opts.useRules && state.importRules[row.normKey]) {
+                    const rule = state.importRules[row.normKey];
+                    if (impRuleValid(row, rule)) { row.type = rule.type; row.category = rule.category; row.suggested = true; }
+                }
+                newRows.push(row);
+            });
+            state.importQueue = state.importQueue.concat(newRows);
+
+            const firstDate = newRows.map(r => r.date).sort()[0] || null;
+            const accountHasTx = state.transactions.some(t => t.account === accName || (t.type === 'transfer' && txTarget(t) === accName));
+            const accObj = state.accountsList.find(a => a.name === accName);
+            state.importMeta.unshift({
+                id: metaId, fileName: file.name, at: todayStr(), rows: newRows.length, skipped,
+                period: parsed.meta.period, accountNo: parsed.meta.accountNo, iban: parsed.meta.iban, stmtId,
+                opening: parsed.opening, closing: parsed.closing, recon: parsed.recon, strategy: parsed.strategy,
+                account: accName, mapped, currency, warnings, firstDate,
+                openingEligible: parsed.opening !== null && !accountHasTx && accObj && !accObj.initialBalance,
+                openingApplied: false
+            });
+            state.importMeta = state.importMeta.slice(0, 6);
+            if (stmtId) state.importMap[stmtId] = accName;
+            return newRows.length;
+        }
+
+        function impRuleValid(row, rule) {
+            if (!rule || !rule.category) return false;
+            if (rule.type === 'transfer') return state.accountsList.some(a => a.name === rule.category && a.name !== row.account);
+            if (rule.type === 'expense') return row.amount < 0;
+            if (rule.type === 'income') return row.amount > 0;
+            return false;
+        }
+
+        function impFindManualDup(row) {
+            const rowAbs = Math.abs(row.amount) * (FX_RATES[row.currency] || 1);
+            const d0 = new Date(row.date).getTime();
+            return state.transactions.find(t => {
+                if (t.importKey) return false;
+                if (Math.abs(t.amount * (FX_RATES[t.currency] || 1) - rowAbs) > 0.5) return false;
+                let involved;
+                if (row.amount < 0) involved = (t.type === 'expense' && t.account === row.account) || (t.type === 'transfer' && t.account === row.account);
+                else involved = (t.type === 'income' && t.account === row.account) || (t.type === 'transfer' && txTarget(t) === row.account);
+                if (!involved) return false;
+                const dd = Math.abs(new Date(t.date).getTime() - d0) / 86400000;
+                return dd <= (t.type === 'transfer' ? 3 : 1);
+            });
+        }
+
+        function renderImportBadge() {
+            const b = document.getElementById('imp-badge');
+            if (!b) return;
+            const n = state.importQueue.length;
+            b.innerText = n;
+            b.classList.toggle('hidden', n === 0);
+        }
+
+        function impCatOptions(row) {
+            let opts;
+            if (row.type === 'transfer') opts = state.accountsList.map(a => a.name).filter(n => n !== row.account);
+            else if (row.type === 'income') opts = ['Fizetés', 'Mellékállás', 'Befektetési Hozam', 'Egyéb Bevétel'];
+            else opts = Object.keys(state.budgetLimits);
+            if (row.category && !opts.includes(row.category)) opts = opts.concat([row.category]);
+            return opts;
+        }
+
+        function impUpdate(id, field, value) {
+            const r = state.importQueue.find(x => x.id === id);
+            if (!r) return;
+            if (field === 'selected') { r.selected = !!value; renderImport(); saveData(); return; }
+            if (field === 'desc') { r.desc = String(value).trim().slice(0, 120); r.normKey = bpNormKey(r.desc); saveData(); return; }
+            if (field === 'date') { if (/^\d{4}-\d{2}-\d{2}$/.test(value)) r.date = value; renderImport(); saveData(); return; }
+            if (field === 'type') {
+                r.type = value; r.category = ''; r.suggested = false;
+                renderImport(); saveData(); return;
+            }
+            if (field === 'flip') {
+                r.amount = -r.amount;
+                r.type = r.amount < 0 ? 'expense' : 'income'; r.category = ''; r.suggested = false;
+                renderImport(); saveData(); return;
+            }
+            if (field === 'category') {
+                if (value === '__new__') {
+                    const name = (prompt('Új kategória neve:') || '').trim();
+                    if (!name) { renderImport(); return; }
+                    if (!state.budgetLimits[name]) state.budgetLimits[name] = 50000;
+                    value = name;
+                }
+                r.category = value; r.suggested = false;
+                impSuggest = null;
+                if (value) {
+                    const similar = state.importQueue.filter(o => o.id !== r.id && o.normKey && o.normKey === r.normKey && !o.category && o.status === 'ok' && impRuleValid(o, { type: r.type, category: value }));
+                    if (similar.length) impSuggest = { label: r.desc, type: r.type, category: value, ids: similar.map(o => o.id) };
+                }
+                renderImport(); saveData();
+            }
+        }
+
+        function impApplySuggestion() {
+            if (!impSuggest) return;
+            const s = impSuggest;
+            state.importQueue.forEach(r => { if (s.ids.includes(r.id)) { r.type = s.type; r.category = s.category; } });
+            impSuggest = null;
+            renderImport(); saveData();
+        }
+
+        function impDismissSuggestion() { impSuggest = null; renderImport(); }
+
+        function impVisibleRows() {
+            const st = (document.getElementById('imp-f-status') || {}).value || 'all';
+            const q = ((document.getElementById('imp-f-search') || {}).value || '').trim().toLowerCase();
+            return state.importQueue.filter(r => {
+                if (st === 'uncat' && r.category) return false;
+                if (st === 'cat' && !r.category) return false;
+                if (st === 'dup' && r.status === 'ok') return false;
+                if (st === 'hide-dup' && r.status !== 'ok') return false;
+                if (q && !(r.desc + ' ' + r.raw + ' ' + r.date + ' ' + r.amount).toLowerCase().includes(q)) return false;
+                return true;
+            });
+        }
+
+        function impSelectAll(on) {
+            impVisibleRows().forEach(r => { r.selected = on; });
+            renderImport(); saveData();
+        }
+
+        function impBulkApply() {
+            const type = document.getElementById('imp-bulk-type').value;
+            const cat = document.getElementById('imp-bulk-cat').value;
+            if (!cat) { showToast('Válassz kategóriát a tömeges beállításhoz!', 'error'); return; }
+            let n = 0;
+            state.importQueue.forEach(r => {
+                if (!r.selected) return;
+                if (!impRuleValid(r, { type, category: cat })) return;
+                r.type = type; r.category = cat; r.suggested = false; n++;
+            });
+            if (!n) showToast('A kijelölt tételekre ez a típus/kategória nem alkalmazható (pl. kiadás pozitív összegre).', 'error');
+            else showToast(`${n} tétel beállítva.`, 'success');
+            renderImport(); saveData();
+        }
+
+        function impBulkTypeChanged() {
+            const type = document.getElementById('imp-bulk-type').value;
+            const sel = document.getElementById('imp-bulk-cat');
+            let opts;
+            if (type === 'income') opts = ['Fizetés', 'Mellékállás', 'Befektetési Hozam', 'Egyéb Bevétel'];
+            else if (type === 'transfer') opts = state.accountsList.map(a => a.name);
+            else opts = Object.keys(state.budgetLimits);
+            sel.innerHTML = '<option value="">— kategória / másik számla —</option>';
+            opts.forEach(o => sel.appendChild(new Option(o, o)));
+        }
+
+        function impDiscardSelected() {
+            const n = state.importQueue.filter(r => r.selected).length;
+            if (!n) { showToast('Nincs kijelölt tétel.', 'error'); return; }
+            if (!confirm(`${n} kijelölt tételt elvetsz a várólistáról? (A Tranzakciókhoz nem kerülnek be.)`)) return;
+            state.importQueue = state.importQueue.filter(r => !r.selected);
+            renderImport(); renderImportBadge(); saveData();
+        }
+
+        function impClearQueue() {
+            if (!state.importQueue.length) return;
+            if (!confirm('Törlöd a teljes várólistát? A már rögzített tranzakciókat ez nem érinti.')) return;
+            state.importQueue = []; state.importMeta = []; impSuggest = null; impLastResult = null;
+            renderImport(); renderImportBadge(); saveData();
+        }
+
+        function impChangeAccount(metaId, name) {
+            const meta = state.importMeta.find(m => m.id === metaId);
+            if (!meta || !state.accountsList.some(a => a.name === name)) return;
+            meta.account = name;
+            if (meta.stmtId) state.importMap[meta.stmtId] = name;
+            state.importQueue.forEach(r => {
+                if (r.metaId !== metaId) return;
+                r.account = name;
+                if (r.type === 'transfer' && r.category === name) { r.category = ''; r.suggested = false; }
+            });
+            renderImport(); saveData();
+        }
+
+        function impApplyOpening(metaId) {
+            const meta = state.importMeta.find(m => m.id === metaId);
+            if (!meta || meta.opening === null) return;
+            const acc = state.accountsList.find(a => a.name === meta.account);
+            if (!acc) return;
+            const earlier = state.transactions.some(t => meta.firstDate && t.date < meta.firstDate && (t.account === acc.name || (t.type === 'transfer' && txTarget(t) === acc.name)));
+            if (acc.initialBalance || earlier) { showToast('A számlának már van kezdő egyenlege vagy korábbi tranzakciója, ezért nem állítom át.', 'error'); return; }
+            acc.initialBalance = meta.opening * (FX_RATES[meta.currency] || 1);
+            meta.openingApplied = true;
+            renderApp();
+            renderImport();
+            showToast(`A(z) ${acc.name} kezdő egyenlege ${Math.round(acc.initialBalance).toLocaleString()} Ft lett.`, 'success');
+        }
+
+        function impApprove() {
+            const learn = document.getElementById('imp-learn').checked;
+            const chosen = state.importQueue.filter(r => r.selected);
+            if (!chosen.length) { showToast('Nincs kijelölt tétel.', 'error'); return; }
+            let ok = 0, missing = 0, errors = 0;
+            const dates = [];
+            chosen.forEach(r => {
+                if (!r.category) { missing++; return; }
+                const acc = state.accountsList.find(a => a.name === r.account);
+                if (!acc || (acc.type === 'locked' && r.type === 'expense')) { errors++; return; }
+                const tx = {
+                    id: Date.now() + Math.random(), date: r.date, type: r.type, category: r.category,
+                    subtag: r.desc.slice(0, 80), amount: Math.abs(r.amount), currency: r.currency,
+                    account: r.account, importKey: r.key
+                };
+                if (r.type === 'transfer') {
+                    if (r.amount < 0) { tx.account = r.account; tx.toAccount = r.category; tx.category = r.category; }
+                    else { tx.account = r.category; tx.toAccount = r.account; tx.category = r.account; }
+                    if (tx.account === tx.toAccount) { errors++; return; }
+                }
+                state.transactions.unshift(tx);
+                r.__done = true; ok++; dates.push(r.date);
+                if (learn && r.normKey) state.importRules[r.normKey] = { type: r.type, category: r.category };
+            });
+            state.importQueue = state.importQueue.filter(r => !r.__done);
+            impSuggest = null;
+            if (ok > 0) {
+                dates.sort();
+                impLastResult = { count: ok, latestDate: dates[dates.length - 1], earliest: dates[0] };
+            }
+            renderApp();
+            renderImport();
+            let msg = `${ok} tétel rögzítve a Tranzakciókhoz.`;
+            if (missing) msg += ` ${missing} tételből hiányzik a kategória, ezek a várólistán maradtak.`;
+            if (errors) msg += ` ${errors} tétel nem rögzíthető (zárolt számla kiadása vagy érvénytelen áthelyezés).`;
+            showToast(msg, ok ? 'success' : 'error');
+        }
+
+        function impGoToTransactions() {
+            if (!impLastResult) return;
+            jumpToDatePeriod(impLastResult.latestDate);
+            renderApp();
+            switchTab('transactions');
+        }
+
+        function renderImport() {
+            const page = document.getElementById('page-import');
+            if (!page || page.classList.contains('hidden')) { renderImportBadge(); return; }
+            populateImportAccountSelect();
+            impBulkTypeChanged();
+            renderImportBadge();
+
+            // --- összefoglaló kártyák a feltöltésekről
+            const sum = document.getElementById('imp-summary');
+            sum.innerHTML = '';
+            state.importMeta.slice(0, 3).forEach(m => {
+                const div = document.createElement('div');
+                div.className = 'p-3 bg-slate-900/60 rounded-lg border border-slate-800 text-xs space-y-1';
+                let recon = '<span class="text-slate-400">Nem volt nyitó/záró egyenleg az ellenőrzéshez.</span>';
+                if (m.recon && m.recon.checked) {
+                    recon = m.recon.ok
+                        ? '<span class="text-emerald-400">✔ Egyenleg egyeztetve: a nyitó egyenleg + a tételek összege pontosan a záró egyenleg.</span>'
+                        : `<span class="text-amber-400">⚠ Egyenleg-eltérés: ${Math.round(m.recon.diff).toLocaleString()} Ft. Ellenőrizd a tételeket.</span>`;
+                }
+                const accOpts = state.accountsList.map(a => `<option value="${esc(a.name)}" ${a.name === m.account ? 'selected' : ''}>${esc(a.name)}</option>`).join('');
+                div.innerHTML = `
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div class="font-bold text-white">${esc(m.fileName)} <span class="text-slate-400 font-normal">• ${m.rows} új tétel${m.skipped ? ', ' + m.skipped + ' már a várólistán volt' : ''}${m.period ? ' • ' + esc(m.period) : ''}</span></div>
+                        <label class="flex items-center space-x-1 text-slate-400">Számla:
+                            <select onchange="impChangeAccount(${m.id}, this.value)" class="bg-[#0f172a] border border-slate-700 rounded p-1 text-white">${accOpts}</select>
+                        </label>
+                    </div>
+                    <div>${recon}</div>
+                    ${m.opening !== null ? `<div class="text-slate-400">Nyitó egyenleg: ${Math.round(m.opening).toLocaleString()} • Záró egyenleg: ${m.closing !== null ? Math.round(m.closing).toLocaleString() : '—'} ${esc(m.currency)}</div>` : ''}
+                    ${(m.warnings || []).filter(w => !/egyenleg/i.test(w) || m.recon.checked === false).map(w => `<div class="text-amber-400">⚠ ${esc(w)}</div>`).join('')}
+                    ${m.openingEligible && !m.openingApplied ? `<button onclick="impApplyOpening(${m.id})" class="mt-1 px-2 py-1 bg-sky-600/20 hover:bg-sky-600 text-sky-300 hover:text-white border border-sky-500/40 rounded">A számla kezdő egyenlege legyen a kivonat nyitó egyenlege (${Math.round(m.opening).toLocaleString()} Ft)</button>` : ''}
+                `;
+                sum.appendChild(div);
+            });
+
+            // --- banner: javaslat / eredmény
+            const banner = document.getElementById('imp-banner');
+            banner.innerHTML = '';
+            if (impSuggest) {
+                banner.innerHTML += `<div class="p-2.5 bg-indigo-500/10 border border-indigo-500/30 rounded-lg text-xs flex flex-wrap items-center justify-between gap-2">
+                    <span class="text-indigo-200">${impSuggest.ids.length} hasonló, még kategorizálatlan tétel van („${esc(impSuggest.label.slice(0, 40))}”). Ugyanide sorolod őket: <strong>${esc(impSuggest.category)}</strong>?</span>
+                    <span class="space-x-2"><button onclick="impApplySuggestion()" class="px-2 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded">Igen, alkalmazd</button><button onclick="impDismissSuggestion()" class="px-2 py-1 text-slate-400 hover:text-white">Nem</button></span></div>`;
+            }
+            if (impLastResult) {
+                banner.innerHTML += `<div class="p-2.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-xs flex flex-wrap items-center justify-between gap-2">
+                    <span class="text-emerald-300">✔ ${impLastResult.count} tétel bekerült a Tranzakciókba (${esc(impLastResult.earliest)} – ${esc(impLastResult.latestDate)}). Az áttekintés, költségvetés és vagyon már ezekkel számol.</span>
+                    <button onclick="impGoToTransactions()" class="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded">Megnyitás a Tranzakciók fülön</button></div>`;
+            }
+
+            // --- táblázat
+            const tbody = document.getElementById('imp-table-body');
+            tbody.innerHTML = '';
+            const rows = impVisibleRows().slice().sort((a, b) => a.date.localeCompare(b.date));
+            const total = state.importQueue.length;
+            const uncat = state.importQueue.filter(r => !r.category).length;
+            const selected = state.importQueue.filter(r => r.selected).length;
+            document.getElementById('imp-counts').innerText = total
+                ? `${total} tétel a várólistán • ${uncat} kategorizálatlan • ${selected} kijelölve`
+                : 'A várólista üres.';
+            document.getElementById('imp-approve-count').innerText = selected;
+
+            if (!rows.length) {
+                tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-slate-500">${total ? 'Nincs a szűrésnek megfelelő tétel.' : 'Tölts fel egy bankszámlakivonatot a feldolgozáshoz.'}</td></tr>`;
+                return;
+            }
+            rows.forEach(r => {
+                const tr = document.createElement('tr');
+                const allowed = r.amount < 0 ? [['expense', 'Kiadás'], ['transfer', 'Áthelyezés']] : [['income', 'Bevétel'], ['transfer', 'Áthelyezés']];
+                if (!allowed.some(a => a[0] === r.type)) allowed.unshift([r.type, r.type]);
+                const typeOpts = allowed.map(a => `<option value="${a[0]}" ${a[0] === r.type ? 'selected' : ''}>${a[1]}</option>`).join('');
+                const cats = impCatOptions(r);
+                const catOpts = '<option value="">— válassz —</option>' + cats.map(c => `<option value="${esc(c)}" ${c === r.category ? 'selected' : ''}>${esc(c)}</option>`).join('')
+                    + (r.type === 'expense' ? '<option value="__new__">➕ Új kategória…</option>' : '');
+                let statusHtml;
+                if (r.status === 'dup-import') statusHtml = `<span class="text-slate-400" title="${esc(r.dupNote)}">🔁 már importálva</span>`;
+                else if (r.status === 'dup-manual') statusHtml = `<span class="text-amber-400" title="${esc(r.dupNote)}">⚠ lehet duplikáció</span>`;
+                else if (!r.category) statusHtml = '<span class="text-rose-400">kategória hiányzik</span>';
+                else if (r.suggested) statusHtml = '<span class="text-indigo-300" title="A korábbi döntésed alapján javasolt, jóváhagyáskor rögzül.">💡 javasolt</span>';
+                else statusHtml = '<span class="text-emerald-400">kész</span>';
+                const hintHtml = r.hint === 'transfer' && r.type !== 'transfer' && !r.category
+                    ? '<span class="ml-1 text-[10px] text-sky-300" title="A leírás alapján saját számlák közötti mozgás is lehet">💡 áthelyezés?</span>' : '';
+                tr.className = r.status !== 'ok' ? 'opacity-70' : '';
+                tr.innerHTML = `
+                    <td class="p-2"><input type="checkbox" ${r.selected ? 'checked' : ''} onchange="impUpdate(${r.id}, 'selected', this.checked)" class="accent-indigo-500"></td>
+                    <td class="p-2"><input type="date" value="${esc(r.date)}" onchange="impUpdate(${r.id}, 'date', this.value)" class="bg-[#0f172a] border border-slate-700 rounded p-1 text-white w-[118px]"></td>
+                    <td class="p-2 min-w-[220px]">
+                        <input type="text" value="${esc(r.desc)}" title="${esc(r.raw)}" onchange="impUpdate(${r.id}, 'desc', this.value)" class="w-full bg-[#0f172a] border border-slate-700 rounded p-1 text-white">
+                        ${hintHtml}
+                    </td>
+                    <td class="p-2 whitespace-nowrap font-semibold ${r.amount < 0 ? 'text-rose-500' : 'text-emerald-500'}">
+                        ${r.amount > 0 ? '+' : ''}${Math.round(r.amount * 100) / 100 === Math.round(r.amount) ? Math.round(r.amount).toLocaleString() : r.amount.toLocaleString()} ${esc(r.currency)}
+                        <button onclick="impUpdate(${r.id}, 'flip', 1)" class="ml-1 text-slate-500 hover:text-indigo-400" title="Előjel megfordítása (ha a bank nem jelölte helyesen)">±</button>
+                    </td>
+                    <td class="p-2"><select onchange="impUpdate(${r.id}, 'type', this.value)" class="bg-[#0f172a] border border-slate-700 rounded p-1 text-white">${typeOpts}</select></td>
+                    <td class="p-2"><select onchange="impUpdate(${r.id}, 'category', this.value)" class="w-full bg-[#0f172a] border ${r.category ? 'border-slate-700' : 'border-rose-500/50'} rounded p-1 text-white">${catOpts}</select>
+                        ${r.type === 'transfer' ? `<div class="text-[10px] text-slate-500 mt-0.5">${r.amount < 0 ? 'Cél számla' : 'Forrás számla'}</div>` : ''}</td>
+                    <td class="p-2 whitespace-nowrap">${statusHtml}</td>`;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // =====================================================================
+        // INFLÁCIÓ-KÖVETÉS
+        // =====================================================================
+        let inflChartInstance = null;
+        const INFL_BUCKETS = [
+            { key: 'liquid', label: 'Likvid számlák' },
+            { key: 'emergency', label: 'Vészhelyzeti alap' },
+            { key: 'locked', label: 'Zárolt megtakarítás' },
+            { key: 'portfolio', label: 'Befektetési portfólió' }
+        ];
+
+        function inflProjection() {
+            const w = computeWealthAt(selectedYear, selectedMonth);
+            const b = {};
+            INFL_BUCKETS.forEach(k => { b[k.key] = Math.max(0, w.buckets[k.key] || 0); });
+            const W = INFL_BUCKETS.reduce((s, k) => s + b[k.key], 0);
+            const i = (state.inflation.annual || 0) / 100;
+            const years = Array.from({ length: 11 }, (_, n) => n);
+            const pillow = years.map(n => W / Math.pow(1 + i, n));
+            const withYield = years.map(n => {
+                const nominal = INFL_BUCKETS.reduce((s, k) => s + b[k.key] * Math.pow(1 + (state.inflation.yields[k.key] || 0) / 100, n), 0);
+                return { nominal, real: nominal / Math.pow(1 + i, n) };
+            });
+            return { W, b, i, years, pillow, withYield };
+        }
+
+        function setInflationRate(v) {
+            const n = parseFloat(String(v).replace(',', '.'));
+            if (isNaN(n) || n < -5 || n > 100) { showToast('Adj meg érvényes inflációs rátát (-5 és 100% között)!', 'error'); renderInflation(); return; }
+            state.inflation.annual = n;
+            renderInflation(); renderSmartInsights(); saveData();
+        }
+
+        function setInflationYield(key, v) {
+            const n = parseFloat(String(v).replace(',', '.'));
+            if (isNaN(n) || n < -100 || n > 200) { showToast('Adj meg érvényes éves hozamot!', 'error'); renderInflation(); return; }
+            state.inflation.yields[key] = n;
+            renderInflation(); renderSmartInsights(); saveData();
+        }
+
+        function resetInflationRate() { setInflationRate(2.0); }
+
+        function renderInflation() {
+            const card = document.getElementById('inflation-card');
+            if (!card || !state.inflation) return;
+            const p = inflProjection();
+            const fmt = n => Math.round(n).toLocaleString();
+            const rateInput = document.getElementById('infl-rate');
+            if (rateInput && document.activeElement !== rateInput) rateInput.value = state.inflation.annual;
+
+            const loss1 = p.W - p.pillow[1];
+            const monthly = p.W * (1 - Math.pow(1 + p.i, -1 / 12));
+            const half = p.i > 0 ? Math.log(2) / Math.log(1 + p.i) : Infinity;
+            document.getElementById('infl-kpis').innerHTML = `
+                <div class="p-3 bg-slate-900/60 rounded-lg border border-slate-800">
+                    <div class="text-slate-400">Mai vagyon vásárlóereje 1 év múlva, ha csak áll (0% hozam)</div>
+                    <div class="text-base font-bold text-white mt-0.5">${fmt(p.pillow[1])} Ft</div>
+                    <div class="text-[11px] text-rose-400 mt-0.5">▼ −${fmt(loss1)} Ft vásárlóerő évente</div>
+                </div>
+                <div class="p-3 bg-slate-900/60 rounded-lg border border-slate-800">
+                    <div class="text-slate-400">Havi elértéktelenedés (0% hozammal)</div>
+                    <div class="text-base font-bold text-white mt-0.5">−${fmt(monthly)} Ft / hó</div>
+                    <div class="text-[11px] text-slate-500 mt-0.5">≈ ${fmt(monthly / 30)} Ft naponta</div>
+                </div>
+                <div class="p-3 bg-slate-900/60 rounded-lg border border-slate-800">
+                    <div class="text-slate-400">Mikor érne feleannyit a „párna alatti” pénz?</div>
+                    <div class="text-base font-bold text-white mt-0.5">${isFinite(half) ? half.toFixed(1) + ' év' : 'nincs infláció'}</div>
+                    <div class="text-[11px] text-slate-500 mt-0.5">${state.inflation.annual}% éves inflációval számolva</div>
+                </div>`;
+
+            // eszközcsoportok táblája
+            const tb = document.getElementById('infl-bucket-body');
+            tb.innerHTML = '';
+            INFL_BUCKETS.forEach(k => {
+                const y = state.inflation.yields[k.key] || 0;
+                const real = ((1 + y / 100) / (1 + p.i) - 1) * 100;
+                const delta = p.b[k.key] * real / 100;
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="p-2 font-medium text-white">${k.label}</td>
+                    <td class="p-2 whitespace-nowrap">${fmt(p.b[k.key])} Ft</td>
+                    <td class="p-2"><input type="number" step="0.1" value="${y}" onchange="setInflationYield('${k.key}', this.value)" class="w-20 bg-[#0f172a] border border-slate-700 rounded p-1 text-white"> %</td>
+                    <td class="p-2 whitespace-nowrap ${real >= 0 ? 'text-emerald-500' : 'text-rose-500'}">${real >= 0 ? '+' : ''}${real.toFixed(2)}%</td>
+                    <td class="p-2 whitespace-nowrap ${delta >= 0 ? 'text-emerald-500' : 'text-rose-500'}">${delta >= 0 ? '+' : '−'}${fmt(Math.abs(delta))} Ft</td>`;
+                tb.appendChild(tr);
+            });
+
+            // időtávok táblája
+            const hb = document.getElementById('infl-horizon-body');
+            hb.innerHTML = '';
+            [1, 3, 5, 10].forEach(n => {
+                const wy = p.withYield[n];
+                const d = wy.real - p.W;
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="p-2 font-medium text-white">${n} év múlva</td>
+                    <td class="p-2 whitespace-nowrap">${fmt(wy.nominal)} Ft</td>
+                    <td class="p-2 whitespace-nowrap text-white">${fmt(wy.real)} Ft</td>
+                    <td class="p-2 whitespace-nowrap ${d >= 0 ? 'text-emerald-500' : 'text-rose-500'}">${d >= 0 ? '+' : '−'}${fmt(Math.abs(d))} Ft</td>
+                    <td class="p-2 whitespace-nowrap text-slate-400">${fmt(p.pillow[n])} Ft</td>`;
+                hb.appendChild(tr);
+            });
+
+            const em = state.emergencySettings || {};
+            const emTarget = (em.monthlyExpense || 0) * (em.targetMonths || 0);
+            document.getElementById('infl-note').innerText = (emTarget > 0
+                ? `A vészhelyzeti alap célja (${fmt(emTarget)} Ft) 1 év múlva az infláció miatt kb. ${fmt(emTarget * (1 + p.i))} Ft lesz ugyanannyi vásárlóerőhöz. `
+                : '')
+                + 'A számítás becslés, nem előrejelzés: az inflációt és a hozamokat te állítod be, a jövőbeli értékük bizonytalan. A „reálérték” a mai árakon mért vásárlóerőt jelenti.';
+
+            // vagyon-kártya jelzés
+            const wn = document.getElementById('wealth-inflation-note');
+            if (wn) wn.innerText = p.W > 0 && p.i > 0 ? `Infláció: évente kb. −${fmt(loss1)} Ft vásárlóerő, ha nem hozik hozamot` : '';
+
+            // grafikon
+            const cv = document.getElementById('inflationChart');
+            if (cv && typeof Chart !== 'undefined') {
+                if (inflChartInstance) inflChartInstance.destroy();
+                inflChartInstance = new Chart(cv.getContext('2d'), {
+                    type: 'line',
+                    data: {
+                        labels: p.years.map(n => n === 0 ? 'Ma' : n + '. év'),
+                        datasets: [
+                            { label: 'Párna alatt (0% hozam), reálérték', data: p.pillow.map(v => Math.round(v)), borderColor: '#f43f5e', backgroundColor: 'rgba(244,63,94,0.08)', fill: true, tension: 0.25, pointRadius: 2 },
+                            { label: 'Beállított hozamokkal, reálérték', data: p.withYield.map(v => Math.round(v.real)), borderColor: '#10b981', tension: 0.25, pointRadius: 2 },
+                            { label: 'Mai vagyon', data: p.years.map(() => Math.round(p.W)), borderColor: '#64748b', borderDash: [5, 5], pointRadius: 0 }
+                        ]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: { legend: { labels: { color: '#94a3b8', boxWidth: 10, font: { size: 10 } } } },
+                        scales: {
+                            x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: '#1e293b' } },
+                            y: { ticks: { color: '#94a3b8', font: { size: 10 }, callback: v => v.toLocaleString() }, grid: { color: '#1e293b' } }
+                        }
+                    }
+                });
+            }
+        }
+
     </script>
 </body>
 </html>
-
